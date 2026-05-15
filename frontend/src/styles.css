@@ -271,6 +271,7 @@ a {
 
 .secondary-switch {
   width: 100%;
+  flex-wrap: wrap;
 }
 
 .subtle-card {
@@ -288,6 +289,77 @@ a {
 
 .secondary-button {
   box-shadow: none;
+}
+
+.image-paste-zone {
+  display: grid;
+  gap: 8px;
+  padding: 18px;
+  border-radius: 20px;
+  border: 1px dashed rgba(197, 96, 24, 0.28);
+  background: rgba(255, 250, 243, 0.96);
+  color: #4e4339;
+  cursor: pointer;
+}
+
+.image-paste-zone p,
+.image-paste-zone span {
+  margin: 0;
+}
+
+.image-paste-zone strong {
+  font-size: 1rem;
+}
+
+.image-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.image-preview-card {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 18px;
+  border: 1px solid rgba(29, 26, 23, 0.08);
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.image-preview-card img {
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  border-radius: 12px;
+  border: 1px solid rgba(29, 26, 23, 0.08);
+}
+
+.image-preview-meta {
+  display: grid;
+  gap: 2px;
+}
+
+.image-preview-meta strong,
+.image-preview-meta span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.image-preview-meta span {
+  color: #75695d;
+  font-size: 0.9rem;
+}
+
+.preview-remove {
+  justify-self: start;
+  border: none;
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: rgba(179, 44, 34, 0.08);
+  color: #92291e;
+  font-weight: 700;
+  cursor: pointer;
 }
 
 .toggle,
@@ -568,7 +640,8 @@ blockquote {
   .two-column,
   .stats-grid,
   .quote-grid,
-  .comparison-grid {
+  .comparison-grid,
+  .image-preview-grid {
     grid-template-columns: 1fr;
   }
 

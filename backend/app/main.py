@@ -6,11 +6,12 @@ from pathlib import Path
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 
-from app.models import CombinedAnalysisResponse, CopyAnalysisResponse
+from app.models import CombinedAnalysisResponse, CopyAnalysisResponse, DataScreenshotAnalysisResponse
 from app.services.ai_summary import generate_ai_summary
 from app.services.bilibili_service import BilibiliFetchError, fetch_bilibili_payload
 from app.services.comment_service import analyze_comments
 from app.services.copy_analysis import analyze_copywriting
+from app.services.data_screenshot_analysis import analyze_data_screenshots
 from app.services.danmaku_service import analyze_danmaku
 from app.services.parsers import parse_comments, parse_danmaku
 
@@ -98,6 +99,57 @@ def analyze_copy():
         return jsonify({"detail": str(exc) or "AI 文案分析失败，请稍后重试。"}), 502
 
     return jsonify(CopyAnalysisResponse(analysis=analysis, title=title, notes=notes).to_dict())
+
+
+@app.post("/api/analyze/data-screenshots")
+def analyze_data_screenshot_input():
+    image_files = request.files.getlist("images")
+    manuscript = str(request.form.get("manuscript") or "").strip()
+    title = str(request.form.get("title") or "").strip()
+    notes = str(request.form.get("notes") or "").strip()
+
+    if not image_files:
+        return jsonify({"detail": "请至少粘贴或上传一张视频数据截图。"}), 400
+
+    images: list[dict[str, str | bytes]] = []
+    for image_file in image_files:
+        raw_bytes = image_file.read()
+        if not raw_bytes:
+            continue
+        images.append(
+            {
+                "filename": image_file.filename or "screenshot",
+                "mime_type": image_file.mimetype or "application/octet-stream",
+                "bytes": raw_bytes,
+            }
+        )
+
+    if not images:
+        return jsonify({"detail": "上传的截图为空，请重新粘贴或选择图片。"}), 400
+
+    try:
+        analysis = asyncio.run(
+            analyze_data_screenshots(
+                images=images,
+                manuscript=manuscript,
+                title=title,
+                notes=notes,
+            )
+        )
+    except ValueError as exc:
+        return jsonify({"detail": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"detail": str(exc) or "AI 视频数据分析失败，请稍后重试。"}), 502
+
+    return jsonify(
+        DataScreenshotAnalysisResponse(
+            analysis=analysis,
+            image_count=len(images),
+            title=title,
+            notes=notes,
+            manuscript_attached=bool(manuscript),
+        ).to_dict()
+    )
 
 
 @app.get("/", defaults={"path": ""})

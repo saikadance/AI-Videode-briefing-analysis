@@ -70,3 +70,11 @@ export interface CopyAnalysisResult {
   title: string;
   notes: string;
 }
+
+export interface DataScreenshotAnalysisResult {
+  analysis: string;
+  image_count: number;
+  title: string;
+  notes: string;
+  manuscript_attached: boolean;
+}

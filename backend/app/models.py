@@ -95,3 +95,15 @@ class CopyAnalysisResponse:
 
     def to_dict(self) -> dict:
         return asdict(self)
+
+
+@dataclass(slots=True)
+class DataScreenshotAnalysisResponse:
+    analysis: str
+    image_count: int = 0
+    title: str = ""
+    notes: str = ""
+    manuscript_attached: bool = False
+
+    def to_dict(self) -> dict:
+        return asdict(self)

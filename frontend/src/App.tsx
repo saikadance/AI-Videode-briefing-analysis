@@ -1,23 +1,25 @@
 import { FormEvent, Suspense, lazy, useState } from "react";
-import { analyzeBilibili, analyzeCopy, analyzeFiles } from "./api";
+import { analyzeBilibili, analyzeCopy, analyzeDataScreenshots, analyzeFiles } from "./api";
 import { AiSummary } from "./components/AiSummary";
 import { CommentSummary } from "./components/CommentSummary";
 import { FileUploader } from "./components/FileUploader";
+import { ImagePasteUploader } from "./components/ImagePasteUploader";
 import { PeakSegments } from "./components/PeakSegments";
 import { SourceSummary } from "./components/SourceSummary";
-import { CombinedAnalysis, CopyAnalysisResult } from "./types";
+import { CombinedAnalysis, CopyAnalysisResult, DataScreenshotAnalysisResult } from "./types";
 
 const DanmakuTimeline = lazy(() =>
   import("./components/DanmakuTimeline").then((module) => ({ default: module.DanmakuTimeline }))
 );
 
-type AssistMode = "bilibili" | "files";
+type AssistMode = "metrics" | "bilibili" | "files";
 
 export default function App() {
-  const [assistMode, setAssistMode] = useState<AssistMode>("bilibili");
+  const [assistMode, setAssistMode] = useState<AssistMode>("metrics");
   const [videoInput, setVideoInput] = useState("");
   const [commentsFile, setCommentsFile] = useState<File | null>(null);
   const [danmakuFile, setDanmakuFile] = useState<File | null>(null);
+  const [metricImages, setMetricImages] = useState<File[]>([]);
   const [copyTitle, setCopyTitle] = useState("");
   const [copyNotes, setCopyNotes] = useState("");
   const [manuscript, setManuscript] = useState("");
@@ -29,6 +31,7 @@ export default function App() {
   const [assistError, setAssistError] = useState<string | null>(null);
   const [result, setResult] = useState<CombinedAnalysis | null>(null);
   const [copyResult, setCopyResult] = useState<CopyAnalysisResult | null>(null);
+  const [metricResult, setMetricResult] = useState<DataScreenshotAnalysisResult | null>(null);
 
   const handleCopySubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -51,11 +54,21 @@ export default function App() {
     setAssistError(null);
 
     try {
-      const analysis =
-        assistMode === "bilibili"
-          ? await analyzeBilibili({ videoInput, useAi })
-          : await submitFiles();
-      setResult(analysis);
+      if (assistMode === "metrics") {
+        const screenshotAnalysis = await analyzeDataScreenshots({
+          images: metricImages,
+          manuscript,
+          title: copyTitle,
+          notes: copyNotes,
+        });
+        setMetricResult(screenshotAnalysis);
+      } else {
+        const analysis =
+          assistMode === "bilibili"
+            ? await analyzeBilibili({ videoInput, useAi })
+            : await submitFiles();
+        setResult(analysis);
+      }
     } catch (submitError) {
       setAssistError(submitError instanceof Error ? submitError.message : "分析失败");
     } finally {
@@ -150,14 +163,21 @@ export default function App() {
           <aside className="panel secondary-panel">
             <div className="stack compact">
               <span className="section-kicker">辅助分析台</span>
-              <h3>评论 / 弹幕 / 链接抓取</h3>
+              <h3>视频数据 / 评论 / 弹幕</h3>
               <p className="muted auxiliary-copy">
-                这部分用于补充判断视频上线后的观众反馈与高能片段。当前更适合作为文稿分析之后的验证工具。
+                这部分用于补充判断视频上线后的观众反馈、后台数据和高能片段。你可以直接粘贴后台截图，让 AI 结合当前文稿一起做联合判断。
               </p>
             </div>
 
             <form className="stack" onSubmit={handleAssistSubmit}>
               <div className="mode-switch secondary-switch">
+                <button
+                  className={assistMode === "metrics" ? "mode-pill active" : "mode-pill"}
+                  type="button"
+                  onClick={() => setAssistMode("metrics")}
+                >
+                  视频数据截图
+                </button>
                 <button
                   className={assistMode === "bilibili" ? "mode-pill active" : "mode-pill"}
                   type="button"
@@ -174,7 +194,15 @@ export default function App() {
                 </button>
               </div>
 
-              {assistMode === "bilibili" ? (
+              {assistMode === "metrics" ? (
+                <section className="input-card subtle-card">
+                  <label className="field-label">视频数据截图输入</label>
+                  <ImagePasteUploader files={metricImages} onChange={setMetricImages} />
+                  <p className="muted">
+                    推荐粘贴：核心数据汇总、播放趋势、留存/流失、游客吸引力、封面标题点击率、互动率、转粉率等页面截图。当前主分析台里的文稿会自动一起带入做联合分析。
+                  </p>
+                </section>
+              ) : assistMode === "bilibili" ? (
                 <section className="input-card subtle-card">
                   <label className="field-label" htmlFor="videoInput">
                     B 站视频链接或 BV 号
@@ -210,17 +238,23 @@ export default function App() {
               )}
 
               <div className="toolbar secondary-toolbar">
-                <label className="toggle">
-                  <input type="checkbox" checked={useAi} onChange={(event) => setUseAi(event.target.checked)} />
-                  <span>生成 AI 辅助摘要</span>
-                </label>
+                {assistMode !== "metrics" ? (
+                  <label className="toggle">
+                    <input type="checkbox" checked={useAi} onChange={(event) => setUseAi(event.target.checked)} />
+                    <span>生成 AI 辅助摘要</span>
+                  </label>
+                ) : (
+                  <div className="muted">直接调用 GPT-5.5 做视频数据读图分析，并结合当前文稿一起汇总。</div>
+                )}
 
                 <button className="primary-button secondary-button" type="submit" disabled={assistLoading}>
                   {assistLoading
                     ? "分析中..."
-                    : assistMode === "bilibili"
-                      ? "抓取并分析"
-                      : "开始分析"}
+                    : assistMode === "metrics"
+                      ? "分析截图"
+                      : assistMode === "bilibili"
+                        ? "抓取并分析"
+                        : "开始分析"}
                 </button>
               </div>
             </form>
@@ -229,26 +263,26 @@ export default function App() {
           </aside>
         </section>
 
-        {copyResult ? (
+        {copyResult || metricResult || result ? (
           <section className="stack">
-            <AiSummary content={copyResult.analysis} title="AI 文案文稿分析" />
-          </section>
-        ) : result ? (
-          <section className="stack">
-            {result.source ? <SourceSummary source={result.source} /> : null}
-            {result.ai_summary ? (
-              <AiSummary content={result.ai_summary} />
-            ) : null}
+            {copyResult ? <AiSummary content={copyResult.analysis} title="AI 文案文稿分析" /> : null}
+            {metricResult ? <AiSummary content={metricResult.analysis} title="AI 视频数据截图分析" /> : null}
+            {result?.source ? <SourceSummary source={result.source} /> : null}
+            {result?.ai_summary ? <AiSummary content={result.ai_summary} /> : null}
 
-            <CommentSummary data={result.comments} />
-            <Suspense fallback={<section className="panel">弹幕时间轴加载中...</section>}>
-              <DanmakuTimeline
-                data={result.danmaku}
-                bucketSize={bucketSize}
-                onBucketSizeChange={setBucketSize}
-              />
-            </Suspense>
-            <PeakSegments data={result.danmaku} />
+            {result ? (
+              <>
+                <CommentSummary data={result.comments} />
+                <Suspense fallback={<section className="panel">弹幕时间轴加载中...</section>}>
+                  <DanmakuTimeline
+                    data={result.danmaku}
+                    bucketSize={bucketSize}
+                    onBucketSizeChange={setBucketSize}
+                  />
+                </Suspense>
+                <PeakSegments data={result.danmaku} />
+              </>
+            ) : null}
           </section>
         ) : (
           <section className="panel placeholder-panel">

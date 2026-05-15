@@ -1,4 +1,4 @@
-import { CombinedAnalysis, CopyAnalysisResult } from "./types";
+import { CombinedAnalysis, CopyAnalysisResult, DataScreenshotAnalysisResult } from "./types";
 
 export async function analyzeFiles(input: {
   commentsFile: File;
@@ -66,6 +66,33 @@ export async function analyzeCopy(input: {
   if (!response.ok) {
     const data = await response.json().catch(() => null);
     throw new Error(data?.detail || "文案分析失败");
+  }
+
+  return response.json();
+}
+
+export async function analyzeDataScreenshots(input: {
+  images: File[];
+  manuscript: string;
+  title: string;
+  notes: string;
+}): Promise<DataScreenshotAnalysisResult> {
+  const formData = new FormData();
+  input.images.forEach((image) => {
+    formData.append("images", image);
+  });
+  formData.append("manuscript", input.manuscript);
+  formData.append("title", input.title);
+  formData.append("notes", input.notes);
+
+  const response = await fetch("/api/analyze/data-screenshots", {
+    method: "POST",
+    body: formData
+  });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+    throw new Error(data?.detail || "视频数据分析失败");
   }
 
   return response.json();
