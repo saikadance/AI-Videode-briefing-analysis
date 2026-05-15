@@ -1,5 +1,21 @@
 import { CombinedAnalysis, CopyAnalysisResult, DataScreenshotAnalysisResult } from "./types";
 
+async function readError(response: Response, fallback: string): Promise<Error> {
+  const text = await response.text().catch(() => "");
+  if (!text) {
+    return new Error(fallback);
+  }
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed?.detail) {
+      return new Error(parsed.detail);
+    }
+  } catch {
+    // noop
+  }
+  return new Error(text || fallback);
+}
+
 export async function analyzeFiles(input: {
   commentsFile: File;
   danmakuFile: File;
@@ -39,8 +55,7 @@ export async function analyzeBilibili(input: {
   });
 
   if (!response.ok) {
-    const data = await response.json().catch(() => null);
-    throw new Error(data?.detail || "抓取并分析失败");
+    throw await readError(response, "抓取并分析失败");
   }
 
   return response.json();
@@ -64,12 +79,7 @@ export async function analyzeCopy(input: {
   });
 
   if (!response.ok) {
-    const data = await response.json().catch(() => null);
-    if (data?.detail) {
-      throw new Error(data.detail);
-    }
-    const text = await response.text().catch(() => "");
-    throw new Error(text || "文案分析失败");
+    throw await readError(response, "文案分析失败");
   }
 
   return response.json();
@@ -95,12 +105,7 @@ export async function analyzeDataScreenshots(input: {
   });
 
   if (!response.ok) {
-    const data = await response.json().catch(() => null);
-    if (data?.detail) {
-      throw new Error(data.detail);
-    }
-    const text = await response.text().catch(() => "");
-    throw new Error(text || "视频数据分析失败");
+    throw await readError(response, "视频数据分析失败");
   }
 
   return response.json();

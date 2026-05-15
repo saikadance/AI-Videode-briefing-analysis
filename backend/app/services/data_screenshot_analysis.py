@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import base64
 from pathlib import Path
 
 from app.config import get_settings
-from app.services.openai_client import request_multimodal_completion
+from app.services.openai_client import OpenAIServiceError, request_multimodal_completion
 
 
 SKILL_PATH = Path(__file__).resolve().parents[3] / "skills" / "video-data-analyst" / "SKILL.md"
@@ -21,14 +20,26 @@ async def analyze_data_screenshots(
     if not images:
         raise ValueError("请至少提供一张视频数据截图。")
 
-    encoded_images = [_encode_image_payload(image) for image in images]
-    return await request_multimodal_completion(
-        system_prompt=_load_skill_prompt(),
-        user_text=_build_user_prompt(manuscript=manuscript, title=title, notes=notes, image_count=len(encoded_images)),
-        images=encoded_images,
-        temperature=None,
-        model=get_settings().openai_copy_model,
-    )
+    image_payloads = [_prepare_image_payload(image) for image in images]
+    settings = get_settings()
+    try:
+        return await request_multimodal_completion(
+            system_prompt=_load_skill_prompt(),
+            user_text=_build_user_prompt(manuscript=manuscript, title=title, notes=notes, image_count=len(image_payloads)),
+            images=image_payloads,
+            temperature=None,
+            model=settings.openai_copy_model,
+        )
+    except OpenAIServiceError:
+        if settings.openai_copy_model != settings.openai_model:
+            return await request_multimodal_completion(
+                system_prompt=_load_skill_prompt(),
+                user_text=_build_user_prompt(manuscript=manuscript, title=title, notes=notes, image_count=len(image_payloads)),
+                images=image_payloads,
+                temperature=0.4,
+                model=settings.openai_model,
+            )
+        raise
 
 
 def _load_skill_prompt() -> str:
@@ -40,20 +51,19 @@ def _load_skill_prompt() -> str:
     return content.strip()
 
 
-def _encode_image_payload(image: dict[str, str | bytes]) -> dict[str, str]:
+def _prepare_image_payload(image: dict[str, str | bytes]) -> dict[str, str]:
     mime_type = str(image.get("mime_type") or "").strip().lower()
     if mime_type not in ALLOWED_IMAGE_TYPES:
         raise ValueError("目前仅支持 PNG、JPG、JPEG、WEBP 格式的数据截图。")
 
-    raw_bytes = image.get("bytes")
-    if not isinstance(raw_bytes, bytes) or not raw_bytes:
-        raise ValueError("上传的截图内容为空或格式异常。")
+    public_url = str(image.get("public_url") or "").strip()
+    if public_url:
+        return {
+            "mime_type": mime_type,
+            "url": public_url,
+        }
 
-    encoded = base64.b64encode(raw_bytes).decode("ascii")
-    return {
-        "mime_type": mime_type,
-        "data_url": f"data:{mime_type};base64,{encoded}",
-    }
+    raise ValueError("截图缺少可访问地址，无法提交给 AI 做读图分析。")
 
 
 def _build_user_prompt(*, manuscript: str, title: str, notes: str, image_count: int) -> str:

@@ -5,6 +5,7 @@ from pathlib import Path
 
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from app.models import CombinedAnalysisResponse, CopyAnalysisResponse, DataScreenshotAnalysisResponse
 from app.services.ai_summary import generate_ai_summary
@@ -14,10 +15,12 @@ from app.services.copy_analysis import analyze_copywriting
 from app.services.data_screenshot_analysis import analyze_data_screenshots
 from app.services.danmaku_service import analyze_danmaku
 from app.services.parsers import parse_comments, parse_danmaku
+from app.services.temp_image_store import resolve_temp_image, save_temp_image
 
 
 FRONTEND_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 app = Flask(__name__, static_folder=str(FRONTEND_DIST), static_url_path="")
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)  # type: ignore[assignment]
 CORS(app)
 
 
@@ -112,15 +115,17 @@ def analyze_data_screenshot_input():
         return jsonify({"detail": "请至少粘贴或上传一张视频数据截图。"}), 400
 
     images: list[dict[str, str | bytes]] = []
+    base_url = request.host_url.rstrip("/")
     for image_file in image_files:
         raw_bytes = image_file.read()
         if not raw_bytes:
             continue
+        image_name = save_temp_image(filename=image_file.filename or "screenshot.png", content=raw_bytes)
         images.append(
             {
                 "filename": image_file.filename or "screenshot",
                 "mime_type": image_file.mimetype or "application/octet-stream",
-                "bytes": raw_bytes,
+                "public_url": f"{base_url}/api/tmp-image/{image_name}",
             }
         )
 
@@ -150,6 +155,15 @@ def analyze_data_screenshot_input():
             manuscript_attached=bool(manuscript),
         ).to_dict()
     )
+
+
+@app.get("/api/tmp-image/<path:image_name>")
+def serve_temp_image(image_name: str):
+    try:
+        file_path, mime_type = resolve_temp_image(image_name)
+    except FileNotFoundError:
+        return jsonify({"detail": "Image Not Found"}), 404
+    return send_from_directory(file_path.parent, file_path.name, mimetype=mime_type)
 
 
 @app.get("/", defaults={"path": ""})

@@ -150,7 +150,7 @@ export default function App() {
               </section>
 
               <div className="toolbar">
-                <div className="muted">直接调用 GPT-5.5 进行文案主分析，不走本地规则摘要。</div>
+                <div className="muted">优先调用 GPT-5.5 进行文案主分析，如代理兼容异常会自动回退到稳定模型。</div>
                 <button className="primary-button" type="submit" disabled={copyLoading}>
                   {copyLoading ? "分析中..." : "分析文稿"}
                 </button>
@@ -244,7 +244,7 @@ export default function App() {
                     <span>生成 AI 辅助摘要</span>
                   </label>
                 ) : (
-                  <div className="muted">直接调用 GPT-5.5 做视频数据读图分析，并结合当前文稿一起汇总。</div>
+                  <div className="muted">优先调用 GPT-5.5 做视频数据读图分析，并结合当前文稿一起汇总。</div>
                 )}
 
                 <button className="primary-button secondary-button" type="submit" disabled={assistLoading}>

@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from app.config import get_settings
-from app.services.openai_client import request_chat_completion
+from app.services.openai_client import OpenAIServiceError, request_chat_completion
 
 
 SKILL_PATH = Path(__file__).resolve().parents[3] / "skills" / "video-copy-analyst" / "SKILL.md"
@@ -12,12 +12,23 @@ SKILL_PATH = Path(__file__).resolve().parents[3] / "skills" / "video-copy-analys
 async def analyze_copywriting(*, manuscript: str, title: str = "", notes: str = "") -> str:
     skill_prompt = _load_skill_prompt()
     prompt = _build_user_prompt(manuscript=manuscript, title=title, notes=notes)
-    return await request_chat_completion(
-        system_prompt=skill_prompt,
-        user_prompt=prompt,
-        temperature=None,
-        model=get_settings().openai_copy_model,
-    )
+    settings = get_settings()
+    try:
+        return await request_chat_completion(
+            system_prompt=skill_prompt,
+            user_prompt=prompt,
+            temperature=None,
+            model=settings.openai_copy_model,
+        )
+    except OpenAIServiceError:
+        if settings.openai_copy_model != settings.openai_model:
+            return await request_chat_completion(
+                system_prompt=skill_prompt,
+                user_prompt=prompt,
+                temperature=0.4,
+                model=settings.openai_model,
+            )
+        raise
 
 
 def _load_skill_prompt() -> str:

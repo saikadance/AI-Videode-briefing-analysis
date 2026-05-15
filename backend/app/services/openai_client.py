@@ -74,7 +74,7 @@ async def request_multimodal_completion(
             {
                 "type": "image_url",
                 "image_url": {
-                    "url": image["data_url"],
+                    "url": image["url"],
                 },
             }
         )
