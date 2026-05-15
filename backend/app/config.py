@@ -14,6 +14,7 @@ class Settings:
     openai_api_key: str
     openai_base_url: str
     openai_model: str
+    openai_copy_model: str
     bilibili_cookie: str
 
 
@@ -31,5 +32,6 @@ def get_settings() -> Settings:
         openai_api_key=_clean_env(os.getenv("OPENAI_API_KEY", "")),
         openai_base_url=_clean_env(os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")).rstrip("/"),
         openai_model=_clean_env(os.getenv("OPENAI_MODEL", "gpt-5.4-mini")),
+        openai_copy_model=_clean_env(os.getenv("OPENAI_COPY_MODEL", "gpt-5.5")),
         bilibili_cookie=_clean_env(os.getenv("BILIBILI_COOKIE", ""), multiline=True),
     )

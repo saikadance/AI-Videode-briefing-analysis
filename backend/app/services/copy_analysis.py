@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from app.config import get_settings
 from app.services.openai_client import request_chat_completion
 
 
@@ -15,6 +16,7 @@ async def analyze_copywriting(*, manuscript: str, title: str = "", notes: str = 
         system_prompt=skill_prompt,
         user_prompt=prompt,
         temperature=0.55,
+        model=get_settings().openai_copy_model,
     )
 
 

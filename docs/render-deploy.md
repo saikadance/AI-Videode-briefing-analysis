@@ -46,6 +46,7 @@
 - `OPENAI_API_KEY`
 - `OPENAI_BASE_URL`
 - `OPENAI_MODEL`
+- `OPENAI_COPY_MODEL`
 - `BILIBILI_COOKIE`
 
 推荐值：
@@ -53,11 +54,13 @@
 ```env
 OPENAI_BASE_URL=https://llm-proxy.tapsvc.com/v1
 OPENAI_MODEL=gpt-5.4-mini
+OPENAI_COPY_MODEL=gpt-5.5
 ```
 
 说明：
 
 - `OPENAI_API_KEY`：填你们内部可用的 key
+- `OPENAI_COPY_MODEL`：文稿分析主功能单独使用的模型，推荐 `gpt-5.5`
 - `BILIBILI_COOKIE`：填当前可用的 B 站登录 cookie
 - 如果 Cookie 失效，线上评论抓取数量会下降
 

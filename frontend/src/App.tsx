@@ -14,7 +14,7 @@ const DanmakuTimeline = lazy(() =>
 type InputMode = "bilibili" | "files" | "copy";
 
 export default function App() {
-  const [inputMode, setInputMode] = useState<InputMode>("bilibili");
+  const [inputMode, setInputMode] = useState<InputMode>("copy");
   const [videoInput, setVideoInput] = useState("");
   const [commentsFile, setCommentsFile] = useState<File | null>(null);
   const [danmakuFile, setDanmakuFile] = useState<File | null>(null);
@@ -65,10 +65,10 @@ export default function App() {
     <div className="page-shell">
       <header className="hero">
         <div className="hero-copy">
-          <p className="eyebrow">Bilibili Video Review Studio</p>
-          <h1>把评论情绪和弹幕高能时刻，整理成一眼能读懂的视频复盘。</h1>
+          <p className="eyebrow">Video Copy Analysis Studio</p>
+          <h1 className="hero-title">先分析文稿，再让视频数据和评论弹幕做辅助判断。</h1>
           <p className="hero-text">
-            现在可以直接输入 B 站视频链接或 BV 号，系统会自动抓取评论与弹幕，生成情绪结构、关键词统计和可缩放的弹幕时间轴。
+            当前主功能已经切到文案文稿分析，适合优先判断钩子、结构、包装和留存风险。评论、弹幕和视频数据分析会继续保留，作为后续验证内容效果的辅助链路。
           </p>
         </div>
       </header>
@@ -77,11 +77,18 @@ export default function App() {
         <section className="panel control-panel">
           <div className="panel-header">
             <h2>分析入口</h2>
-            <span className="muted">推荐直接输入 B 站链接或 BV 号，文件导入模式会保留给补充数据使用</span>
+            <span className="muted">当前以文稿分析为主，评论 / 弹幕 / 视频数据复盘作为辅助判断能力逐步补强</span>
           </div>
 
           <form className="stack" onSubmit={handleSubmit}>
             <div className="mode-switch">
+              <button
+                className={inputMode === "copy" ? "mode-pill active" : "mode-pill"}
+                type="button"
+                onClick={() => setInputMode("copy")}
+              >
+                文案文稿分析
+              </button>
               <button
                 className={inputMode === "bilibili" ? "mode-pill active" : "mode-pill"}
                 type="button"
@@ -95,13 +102,6 @@ export default function App() {
                 onClick={() => setInputMode("files")}
               >
                 本地文件导入
-              </button>
-              <button
-                className={inputMode === "copy" ? "mode-pill active" : "mode-pill"}
-                type="button"
-                onClick={() => setInputMode("copy")}
-              >
-                文案文稿分析
               </button>
             </div>
 
@@ -177,7 +177,7 @@ export default function App() {
                   onChange={(event) => setManuscript(event.target.value)}
                 />
                 <p className="muted">
-                  适合分析：视频脚本、口播文案、采访稿、选题包装方案、标题方向、开头钩子。
+                  适合优先分析：视频脚本、口播文案、采访稿、选题包装方案、标题方向、开头钩子。后续可再结合评论、弹幕和视频数据做综合判断。
                 </p>
               </section>
             )}
@@ -189,7 +189,7 @@ export default function App() {
                   <span>生成 AI 复盘摘要</span>
                 </label>
               ) : (
-                <div className="muted">直接调用 GPT 进行文案点评，不走本地规则摘要。</div>
+                <div className="muted">直接调用 GPT-5.5 进行文案主分析，不走本地规则摘要。</div>
               )}
 
               <button className="primary-button" type="submit" disabled={loading}>
@@ -232,7 +232,7 @@ export default function App() {
           <section className="panel placeholder-panel">
             <h2>当前还没有分析结果</h2>
             <p>
-              你可以输入一个 B 站视频链接或 BV 号做评论与弹幕复盘，也可以切到“文案文稿分析”模式，直接让 AI 从专业视频媒体运营视角点评稿件。
+              你可以先在“文案文稿分析”里判断稿件是否值得发、该怎么改，再结合 B 站评论、弹幕和后续视频数据分析做综合复盘。
             </p>
           </section>
         )}

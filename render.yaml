@@ -12,6 +12,7 @@ services:
         value: https://llm-proxy.tapsvc.com/v1
       - key: OPENAI_MODEL
         value: gpt-5.4-mini
+      - key: OPENAI_COPY_MODEL
+        value: gpt-5.5
       - key: BILIBILI_COOKIE
         sync: false
-
