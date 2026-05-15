@@ -65,8 +65,8 @@ def analyze_bilibili():
         bilibili_payload = fetch_bilibili_payload(video_input)
     except BilibiliFetchError as exc:
         return jsonify({"detail": str(exc)}), 400
-    except Exception:
-        return jsonify({"detail": "抓取 B 站视频数据失败，请稍后重试。"}), 500
+    except Exception as exc:
+        return jsonify({"detail": f"抓取 B 站视频数据失败：{exc}"}), 500
 
     comments_analysis = analyze_comments(bilibili_payload.comments)
     danmaku_analysis = analyze_danmaku(bilibili_payload.danmaku_records)
