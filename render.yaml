@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: bilibili-video-review-studio
+    env: docker
+    plan: starter
+    autoDeploy: true
+    healthCheckPath: /api/health
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_BASE_URL
+        value: https://llm-proxy.tapsvc.com/v1
+      - key: OPENAI_MODEL
+        value: gpt-5.4-mini
+      - key: BILIBILI_COOKIE
+        sync: false
+
