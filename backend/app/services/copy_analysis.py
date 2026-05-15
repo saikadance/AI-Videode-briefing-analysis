@@ -15,7 +15,7 @@ async def analyze_copywriting(*, manuscript: str, title: str = "", notes: str = 
     return await request_chat_completion(
         system_prompt=skill_prompt,
         user_prompt=prompt,
-        temperature=0.55,
+        temperature=None,
         model=get_settings().openai_copy_model,
     )
 

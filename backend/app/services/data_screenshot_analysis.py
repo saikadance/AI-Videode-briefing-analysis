@@ -26,7 +26,7 @@ async def analyze_data_screenshots(
         system_prompt=_load_skill_prompt(),
         user_text=_build_user_prompt(manuscript=manuscript, title=title, notes=notes, image_count=len(encoded_images)),
         images=encoded_images,
-        temperature=0.3,
+        temperature=None,
         model=get_settings().openai_copy_model,
     )
 
