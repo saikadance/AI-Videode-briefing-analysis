@@ -94,6 +94,13 @@ a {
   margin-top: 24px;
 }
 
+.workspace-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(320px, 0.9fr);
+  gap: 24px;
+  align-items: start;
+}
+
 .panel {
   border: 1px solid rgba(29, 26, 23, 0.08);
   border-radius: 28px;
@@ -105,6 +112,16 @@ a {
 
 .control-panel {
   background: linear-gradient(180deg, rgba(255, 252, 247, 0.96), rgba(253, 247, 237, 0.96));
+}
+
+.primary-panel {
+  min-height: 100%;
+}
+
+.secondary-panel {
+  display: grid;
+  gap: 18px;
+  background: linear-gradient(180deg, rgba(255, 254, 250, 0.95), rgba(247, 243, 236, 0.92));
 }
 
 .placeholder-panel {
@@ -127,6 +144,14 @@ a {
 
 .muted {
   color: #75695d;
+}
+
+.section-kicker {
+  font-size: 0.78rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #c56018;
+  font-weight: 700;
 }
 
 .stack {
@@ -237,6 +262,32 @@ a {
 
 .copy-meta-grid {
   align-items: end;
+}
+
+.auxiliary-copy {
+  margin: 0;
+  line-height: 1.65;
+}
+
+.secondary-switch {
+  width: 100%;
+}
+
+.subtle-card {
+  background: rgba(255, 252, 247, 0.92);
+  border-color: rgba(29, 26, 23, 0.08);
+}
+
+.assist-upload-grid {
+  grid-template-columns: 1fr;
+}
+
+.secondary-toolbar {
+  align-items: flex-start;
+}
+
+.secondary-button {
+  box-shadow: none;
 }
 
 .toggle,
@@ -513,6 +564,7 @@ blockquote {
 }
 
 @media (max-width: 900px) {
+  .workspace-grid,
   .two-column,
   .stats-grid,
   .quote-grid,

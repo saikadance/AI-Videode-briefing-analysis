@@ -11,10 +11,10 @@ const DanmakuTimeline = lazy(() =>
   import("./components/DanmakuTimeline").then((module) => ({ default: module.DanmakuTimeline }))
 );
 
-type InputMode = "bilibili" | "files" | "copy";
+type AssistMode = "bilibili" | "files";
 
 export default function App() {
-  const [inputMode, setInputMode] = useState<InputMode>("copy");
+  const [assistMode, setAssistMode] = useState<AssistMode>("bilibili");
   const [videoInput, setVideoInput] = useState("");
   const [commentsFile, setCommentsFile] = useState<File | null>(null);
   const [danmakuFile, setDanmakuFile] = useState<File | null>(null);
@@ -23,34 +23,43 @@ export default function App() {
   const [manuscript, setManuscript] = useState("");
   const [useAi, setUseAi] = useState(true);
   const [bucketSize, setBucketSize] = useState(1);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [copyLoading, setCopyLoading] = useState(false);
+  const [assistLoading, setAssistLoading] = useState(false);
+  const [copyError, setCopyError] = useState<string | null>(null);
+  const [assistError, setAssistError] = useState<string | null>(null);
   const [result, setResult] = useState<CombinedAnalysis | null>(null);
   const [copyResult, setCopyResult] = useState<CopyAnalysisResult | null>(null);
 
-  const handleSubmit = async (event: FormEvent) => {
+  const handleCopySubmit = async (event: FormEvent) => {
     event.preventDefault();
-
-    setLoading(true);
-    setError(null);
+    setCopyLoading(true);
+    setCopyError(null);
 
     try {
-      if (inputMode === "copy") {
-        const analysis = await analyzeCopy({ manuscript, title: copyTitle, notes: copyNotes });
-        setCopyResult(analysis);
-        setResult(null);
-      } else {
-        const analysis =
-          inputMode === "bilibili"
-            ? await analyzeBilibili({ videoInput, useAi })
-            : await submitFiles();
-        setResult(analysis);
-        setCopyResult(null);
-      }
+      const analysis = await analyzeCopy({ manuscript, title: copyTitle, notes: copyNotes });
+      setCopyResult(analysis);
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "分析失败");
+      setCopyError(submitError instanceof Error ? submitError.message : "分析失败");
     } finally {
-      setLoading(false);
+      setCopyLoading(false);
+    }
+  };
+
+  const handleAssistSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    setAssistLoading(true);
+    setAssistError(null);
+
+    try {
+      const analysis =
+        assistMode === "bilibili"
+          ? await analyzeBilibili({ videoInput, useAi })
+          : await submitFiles();
+      setResult(analysis);
+    } catch (submitError) {
+      setAssistError(submitError instanceof Error ? submitError.message : "分析失败");
+    } finally {
+      setAssistLoading(false);
     }
   };
 
@@ -74,71 +83,17 @@ export default function App() {
       </header>
 
       <main className="layout">
-        <section className="panel control-panel">
-          <div className="panel-header">
-            <h2>分析入口</h2>
-            <span className="muted">当前以文稿分析为主，评论 / 弹幕 / 视频数据复盘作为辅助判断能力逐步补强</span>
-          </div>
-
-          <form className="stack" onSubmit={handleSubmit}>
-            <div className="mode-switch">
-              <button
-                className={inputMode === "copy" ? "mode-pill active" : "mode-pill"}
-                type="button"
-                onClick={() => setInputMode("copy")}
-              >
-                文案文稿分析
-              </button>
-              <button
-                className={inputMode === "bilibili" ? "mode-pill active" : "mode-pill"}
-                type="button"
-                onClick={() => setInputMode("bilibili")}
-              >
-                B 站链接抓取
-              </button>
-              <button
-                className={inputMode === "files" ? "mode-pill active" : "mode-pill"}
-                type="button"
-                onClick={() => setInputMode("files")}
-              >
-                本地文件导入
-              </button>
+        <section className="workspace-grid">
+          <section className="panel control-panel primary-panel">
+            <div className="panel-header">
+              <div className="stack compact">
+                <span className="section-kicker">主分析台</span>
+                <h2>文案文稿分析</h2>
+              </div>
+              <span className="muted">先判断这稿子值不值得发、该怎么改，再让后续视频数据来验证判断。</span>
             </div>
 
-            {inputMode === "bilibili" ? (
-              <section className="input-card">
-                <label className="field-label" htmlFor="videoInput">
-                  B 站视频链接或 BV 号
-                </label>
-                <input
-                  id="videoInput"
-                  className="text-input"
-                  placeholder="例如 https://www.bilibili.com/video/BV... 或直接输入 BV 号"
-                  value={videoInput}
-                  onChange={(event) => setVideoInput(event.target.value)}
-                />
-                <p className="muted">
-                  支持 `www.bilibili.com/video/...`、`b23.tv/...` 和直接输入 `BV` 号。多 P 视频会自动识别链接里的 `p=` 参数。
-                </p>
-              </section>
-            ) : inputMode === "files" ? (
-              <div className="two-column">
-                <FileUploader
-                  label="评论文件"
-                  accept=".json,.csv"
-                  helper="支持 JSON / CSV，字段可为 content、message、text、comment"
-                  file={commentsFile}
-                  onChange={setCommentsFile}
-                />
-                <FileUploader
-                  label="弹幕文件"
-                  accept=".xml,.json"
-                  helper="推荐直接导入 B 站弹幕 XML，也支持 JSON"
-                  file={danmakuFile}
-                  onChange={setDanmakuFile}
-                />
-              </div>
-            ) : (
+            <form className="stack" onSubmit={handleCopySubmit}>
               <section className="input-card">
                 <div className="two-column copy-meta-grid">
                   <div className="stack compact">
@@ -180,31 +135,98 @@ export default function App() {
                   适合优先分析：视频脚本、口播文案、采访稿、选题包装方案、标题方向、开头钩子。后续可再结合评论、弹幕和视频数据做综合判断。
                 </p>
               </section>
-            )}
 
-            <div className="toolbar">
-              {inputMode !== "copy" ? (
-                <label className="toggle">
-                  <input type="checkbox" checked={useAi} onChange={(event) => setUseAi(event.target.checked)} />
-                  <span>生成 AI 复盘摘要</span>
-                </label>
-              ) : (
+              <div className="toolbar">
                 <div className="muted">直接调用 GPT-5.5 进行文案主分析，不走本地规则摘要。</div>
+                <button className="primary-button" type="submit" disabled={copyLoading}>
+                  {copyLoading ? "分析中..." : "分析文稿"}
+                </button>
+              </div>
+            </form>
+
+            {copyError ? <div className="error-banner">{copyError}</div> : null}
+          </section>
+
+          <aside className="panel secondary-panel">
+            <div className="stack compact">
+              <span className="section-kicker">辅助分析台</span>
+              <h3>评论 / 弹幕 / 链接抓取</h3>
+              <p className="muted auxiliary-copy">
+                这部分用于补充判断视频上线后的观众反馈与高能片段。当前更适合作为文稿分析之后的验证工具。
+              </p>
+            </div>
+
+            <form className="stack" onSubmit={handleAssistSubmit}>
+              <div className="mode-switch secondary-switch">
+                <button
+                  className={assistMode === "bilibili" ? "mode-pill active" : "mode-pill"}
+                  type="button"
+                  onClick={() => setAssistMode("bilibili")}
+                >
+                  B 站链接抓取
+                </button>
+                <button
+                  className={assistMode === "files" ? "mode-pill active" : "mode-pill"}
+                  type="button"
+                  onClick={() => setAssistMode("files")}
+                >
+                  本地文件导入
+                </button>
+              </div>
+
+              {assistMode === "bilibili" ? (
+                <section className="input-card subtle-card">
+                  <label className="field-label" htmlFor="videoInput">
+                    B 站视频链接或 BV 号
+                  </label>
+                  <input
+                    id="videoInput"
+                    className="text-input"
+                    placeholder="例如 https://www.bilibili.com/video/BV... 或直接输入 BV 号"
+                    value={videoInput}
+                    onChange={(event) => setVideoInput(event.target.value)}
+                  />
+                  <p className="muted">
+                    支持 `www.bilibili.com/video/...`、`b23.tv/...` 和直接输入 `BV` 号。多 P 视频会自动识别链接里的 `p=` 参数。
+                  </p>
+                </section>
+              ) : (
+                <div className="two-column assist-upload-grid">
+                  <FileUploader
+                    label="评论文件"
+                    accept=".json,.csv"
+                    helper="支持 JSON / CSV，字段可为 content、message、text、comment"
+                    file={commentsFile}
+                    onChange={setCommentsFile}
+                  />
+                  <FileUploader
+                    label="弹幕文件"
+                    accept=".xml,.json"
+                    helper="推荐直接导入 B 站弹幕 XML，也支持 JSON"
+                    file={danmakuFile}
+                    onChange={setDanmakuFile}
+                  />
+                </div>
               )}
 
-              <button className="primary-button" type="submit" disabled={loading}>
-                {loading
-                  ? "分析中..."
-                  : inputMode === "bilibili"
-                    ? "抓取并分析"
-                    : inputMode === "files"
-                      ? "开始分析"
-                      : "分析文稿"}
-              </button>
-            </div>
-          </form>
+              <div className="toolbar secondary-toolbar">
+                <label className="toggle">
+                  <input type="checkbox" checked={useAi} onChange={(event) => setUseAi(event.target.checked)} />
+                  <span>生成 AI 辅助摘要</span>
+                </label>
 
-          {error ? <div className="error-banner">{error}</div> : null}
+                <button className="primary-button secondary-button" type="submit" disabled={assistLoading}>
+                  {assistLoading
+                    ? "分析中..."
+                    : assistMode === "bilibili"
+                      ? "抓取并分析"
+                      : "开始分析"}
+                </button>
+              </div>
+            </form>
+
+            {assistError ? <div className="error-banner">{assistError}</div> : null}
+          </aside>
         </section>
 
         {copyResult ? (
@@ -232,7 +254,7 @@ export default function App() {
           <section className="panel placeholder-panel">
             <h2>当前还没有分析结果</h2>
             <p>
-              你可以先在“文案文稿分析”里判断稿件是否值得发、该怎么改，再结合 B 站评论、弹幕和后续视频数据分析做综合复盘。
+              先把文稿贴进主分析台，确认这条视频的钩子、结构和包装方向。评论、弹幕和视频数据复盘可以放在后面，作为上线后的辅助验证。
             </p>
           </section>
         )}
