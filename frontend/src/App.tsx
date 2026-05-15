@@ -13,6 +13,7 @@ const DanmakuTimeline = lazy(() =>
 );
 
 type AssistMode = "metrics" | "bilibili" | "files";
+type ResultView = "copy" | "metrics" | "community";
 
 export default function App() {
   const [assistMode, setAssistMode] = useState<AssistMode>("metrics");
@@ -32,6 +33,7 @@ export default function App() {
   const [result, setResult] = useState<CombinedAnalysis | null>(null);
   const [copyResult, setCopyResult] = useState<CopyAnalysisResult | null>(null);
   const [metricResult, setMetricResult] = useState<DataScreenshotAnalysisResult | null>(null);
+  const [resultView, setResultView] = useState<ResultView>("copy");
 
   const handleCopySubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -41,6 +43,7 @@ export default function App() {
     try {
       const analysis = await analyzeCopy({ manuscript, title: copyTitle, notes: copyNotes });
       setCopyResult(analysis);
+      setResultView("copy");
     } catch (submitError) {
       setCopyError(submitError instanceof Error ? submitError.message : "分析失败");
     } finally {
@@ -62,12 +65,14 @@ export default function App() {
           notes: copyNotes,
         });
         setMetricResult(screenshotAnalysis);
+        setResultView("metrics");
       } else {
         const analysis =
           assistMode === "bilibili"
             ? await analyzeBilibili({ videoInput, useAi })
             : await submitFiles();
         setResult(analysis);
+        setResultView("community");
       }
     } catch (submitError) {
       setAssistError(submitError instanceof Error ? submitError.message : "分析失败");
@@ -265,24 +270,71 @@ export default function App() {
 
         {copyResult || metricResult || result ? (
           <section className="stack">
-            {copyResult ? <AiSummary content={copyResult.analysis} title="AI 文案文稿分析" /> : null}
-            {metricResult ? <AiSummary content={metricResult.analysis} title="AI 视频数据截图分析" /> : null}
-            {result?.source ? <SourceSummary source={result.source} /> : null}
-            {result?.ai_summary ? <AiSummary content={result.ai_summary} /> : null}
+            <section className="panel result-shell">
+              <div className="panel-header result-shell-header">
+                <div className="stack compact">
+                  <span className="section-kicker">结果分页</span>
+                  <h2>分析结果台</h2>
+                </div>
+                <span className="muted">将文稿、截图和评论弹幕拆成独立阅读页，减少来回滚动。</span>
+              </div>
 
-            {result ? (
-              <>
-                <CommentSummary data={result.comments} />
-                <Suspense fallback={<section className="panel">弹幕时间轴加载中...</section>}>
-                  <DanmakuTimeline
-                    data={result.danmaku}
-                    bucketSize={bucketSize}
-                    onBucketSizeChange={setBucketSize}
-                  />
-                </Suspense>
-                <PeakSegments data={result.danmaku} />
-              </>
-            ) : null}
+              <div className="result-tab-strip">
+                {copyResult ? (
+                  <button
+                    className={resultView === "copy" ? "result-tab active" : "result-tab"}
+                    type="button"
+                    onClick={() => setResultView("copy")}
+                  >
+                    文稿分析
+                  </button>
+                ) : null}
+                {metricResult ? (
+                  <button
+                    className={resultView === "metrics" ? "result-tab active" : "result-tab"}
+                    type="button"
+                    onClick={() => setResultView("metrics")}
+                  >
+                    数据截图
+                  </button>
+                ) : null}
+                {result ? (
+                  <button
+                    className={resultView === "community" ? "result-tab active" : "result-tab"}
+                    type="button"
+                    onClick={() => setResultView("community")}
+                  >
+                    评论弹幕
+                  </button>
+                ) : null}
+              </div>
+
+              <div className="result-page">
+                {resultView === "copy" && copyResult ? (
+                  <AiSummary content={copyResult.analysis} title="AI 文案文稿分析" />
+                ) : null}
+
+                {resultView === "metrics" && metricResult ? (
+                  <AiSummary content={metricResult.analysis} title="AI 视频数据截图分析" />
+                ) : null}
+
+                {resultView === "community" && result ? (
+                  <div className="stack">
+                    {result.source ? <SourceSummary source={result.source} /> : null}
+                    {result.ai_summary ? <AiSummary content={result.ai_summary} /> : null}
+                    <CommentSummary data={result.comments} />
+                    <Suspense fallback={<section className="panel">弹幕时间轴加载中...</section>}>
+                      <DanmakuTimeline
+                        data={result.danmaku}
+                        bucketSize={bucketSize}
+                        onBucketSizeChange={setBucketSize}
+                      />
+                    </Suspense>
+                    <PeakSegments data={result.danmaku} />
+                  </div>
+                ) : null}
+              </div>
+            </section>
           </section>
         ) : (
           <section className="panel placeholder-panel">
