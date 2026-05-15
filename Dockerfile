@@ -24,5 +24,4 @@ COPY skills /app/skills
 COPY render_app.py /app/render_app.py
 COPY --from=frontend-builder /app/frontend/dist /app/frontend/dist
 
-CMD ["sh", "-c", "gunicorn render_app:app --bind 0.0.0.0:${PORT:-10000}"]
-
+CMD ["sh", "-c", "gunicorn render_app:app --bind 0.0.0.0:${PORT:-10000} --workers 1 --threads 4 --timeout 180"]

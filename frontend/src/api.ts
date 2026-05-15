@@ -65,7 +65,11 @@ export async function analyzeCopy(input: {
 
   if (!response.ok) {
     const data = await response.json().catch(() => null);
-    throw new Error(data?.detail || "文案分析失败");
+    if (data?.detail) {
+      throw new Error(data.detail);
+    }
+    const text = await response.text().catch(() => "");
+    throw new Error(text || "文案分析失败");
   }
 
   return response.json();
@@ -92,7 +96,11 @@ export async function analyzeDataScreenshots(input: {
 
   if (!response.ok) {
     const data = await response.json().catch(() => null);
-    throw new Error(data?.detail || "视频数据分析失败");
+    if (data?.detail) {
+      throw new Error(data.detail);
+    }
+    const text = await response.text().catch(() => "");
+    throw new Error(text || "视频数据分析失败");
   }
 
   return response.json();
