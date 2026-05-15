@@ -43,35 +43,34 @@ Always evaluate from these angles:
 Use this response structure unless the user requests another format:
 
 ```md
-## 一句话判断
-先说这批数据截图最值得关注的总体结论。
+## 结论
+2-4 句说清这批截图最重要的总体判断。
 
-## 关键信号
-- ...
-- ...
+## 信号
+只保留最重要的 3 个数据 / 趋势信号。
 
-## 从数据反推的问题
-1. ...
-2. ...
-3. ...
+## 问题
+从数据反推最关键的 3 个问题。每点 1-3 句。
 
-## 和当前文稿的关系
-- 哪些数据支持文稿方向
-- 哪些数据说明文稿 / 包装 / 节奏可能不匹配
+## 调整
+给出最优先的 3 条调整建议，优先讲下一步最值得改什么。
 
-## 最优先调整
-1. ...
-2. ...
-3. ...
-
-## 后续还该补看什么
-- 还缺哪些数据
-- 下一次应该重点记录哪些指标或截图
+## 验证
+还缺哪 2-3 个数据，或者下一次最该补截哪些页面。
 ```
+
+## Format Rules
+
+- 标题必须严格使用这 5 个固定短标题：`结论 / 信号 / 问题 / 调整 / 验证`
+- 不要新增更多二级标题
+- 不要把分析拆成很多细碎小节
+- 总篇幅控制在“短而够用”
+- 优先保留强判断，删除重复解释
 
 ## Judgment Rules
 
 - Prefer “这些数据意味着什么” over “图片里显示了什么”.
+- Prefer “更短但更清楚” over “更全但更散”.
 - Distinguish observed facts from inference.
 - If the screenshots are incomplete, say exactly what is missing.
 - If retention or click indicators point to packaging problems, say so directly.

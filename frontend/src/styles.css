@@ -579,9 +579,9 @@ blockquote {
 
 .summary-tab-strip,
 .result-tab-strip {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
   gap: 10px;
-  flex-wrap: wrap;
 }
 
 .summary-tab.active,
@@ -594,7 +594,7 @@ blockquote {
 .ai-summary-page {
   display: grid;
   gap: 18px;
-  padding: 18px;
+  padding: 22px;
   border-radius: 24px;
   background: rgba(255, 255, 255, 0.62);
   border: 1px solid rgba(29, 26, 23, 0.06);
@@ -609,7 +609,7 @@ blockquote {
 
 .ai-summary-section-title {
   margin: 0;
-  font-size: 1.35rem;
+  font-size: 1.22rem;
   color: #5d3111;
 }
 
@@ -624,7 +624,7 @@ blockquote {
   border-radius: 18px;
   background: rgba(255, 250, 244, 0.84);
   color: #463b34;
-  line-height: 1.75;
+  line-height: 1.7;
 }
 
 .ai-summary-item {
@@ -640,7 +640,7 @@ blockquote {
 .ai-summary-item p {
   margin: 0;
   color: #463b34;
-  line-height: 1.72;
+  line-height: 1.68;
 }
 
 .ai-summary-number-card {
@@ -656,7 +656,7 @@ blockquote {
 .ai-summary-number-card p {
   margin: 0;
   color: #463b34;
-  line-height: 1.72;
+  line-height: 1.68;
 }
 
 .ai-summary-number {
@@ -674,7 +674,7 @@ blockquote {
 .ai-summary-subheading {
   margin: 4px 0 0;
   color: #7a4318;
-  font-size: 1.02rem;
+  font-size: 0.98rem;
 }
 
 .ai-summary-marker {
@@ -703,6 +703,15 @@ blockquote {
 .result-page {
   display: grid;
   gap: 18px;
+}
+
+.summary-tab,
+.result-tab {
+  min-height: 44px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .inline-link {

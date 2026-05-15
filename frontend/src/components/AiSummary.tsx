@@ -12,9 +12,20 @@ type SummaryBlock =
   | { type: "paragraph"; text: string };
 
 interface SummarySection {
+  id: string;
   title: string;
   blocks: SummaryBlock[];
 }
+
+const SECTION_PRESETS = [
+  { id: "conclusion", label: "结论", aliases: ["结论", "一句话判断", "发布价值判断"] },
+  { id: "signals", label: "信号", aliases: ["信号", "关键信号"] },
+  { id: "issues", label: "问题", aliases: ["问题", "核心问题", "从数据反推的问题"] },
+  { id: "reasons", label: "原因", aliases: ["原因", "为什么会影响数据"] },
+  { id: "adjustments", label: "调整", aliases: ["调整", "最优先调整", "结构改稿建议"] },
+  { id: "rewrite", label: "改写", aliases: ["改写", "可直接替换的写法"] },
+  { id: "validation", label: "验证", aliases: ["验证", "后续数据验证重点", "后续还该补看什么", "和当前文稿的关系"] },
+] as const;
 
 export function AiSummary({ content, title = "AI 复盘摘要" }: AiSummaryProps) {
   const blocks = useMemo(() => parseSummary(content), [content]);
@@ -64,7 +75,7 @@ export function AiSummary({ content, title = "AI 复盘摘要" }: AiSummaryProps
           {sections.map((section, index) => (
             <button
               className={index === activeSection ? "summary-tab active" : "summary-tab"}
-              key={`${section.title}-${index}`}
+              key={`${section.id}-${index}`}
               type="button"
               onClick={() => setActiveSection(index)}
             >
@@ -146,15 +157,18 @@ function renderInline(text: string) {
 
 function groupSections(blocks: SummaryBlock[]): SummarySection[] {
   const sections: SummarySection[] = [];
-  let pendingTitle = "概览";
+  let pendingId = "conclusion";
+  let pendingTitle = "结论";
   let pendingBlocks: SummaryBlock[] = [];
 
   for (const block of blocks) {
     if (block.type === "heading") {
       if (pendingBlocks.length) {
-        sections.push({ title: pendingTitle, blocks: pendingBlocks });
+        sections.push({ id: pendingId, title: pendingTitle, blocks: pendingBlocks });
       }
-      pendingTitle = block.text;
+      const normalized = normalizeSection(block.text);
+      pendingId = normalized.id;
+      pendingTitle = normalized.label;
       pendingBlocks = [];
       continue;
     }
@@ -163,12 +177,52 @@ function groupSections(blocks: SummaryBlock[]): SummarySection[] {
 
   if (pendingBlocks.length || !sections.length) {
     sections.push({
+      id: pendingId,
       title: pendingTitle,
       blocks: pendingBlocks.length ? pendingBlocks : [{ type: "paragraph", text: "暂无内容。" }],
     });
   }
 
-  return sections;
+  return mergeSectionsByPresetOrder(sections);
+}
+
+function normalizeSection(rawTitle: string) {
+  const title = rawTitle.trim();
+  const matched = SECTION_PRESETS.find((preset) => preset.aliases.some((alias) => title.includes(alias)));
+  if (matched) {
+    return { id: matched.id, label: matched.label };
+  }
+  return { id: `custom-${title}`, label: title || "概览" };
+}
+
+function mergeSectionsByPresetOrder(sections: SummarySection[]): SummarySection[] {
+  const grouped = new Map<string, SummarySection>();
+
+  for (const section of sections) {
+    const existing = grouped.get(section.id);
+    if (existing) {
+      existing.blocks.push(...section.blocks);
+    } else {
+      grouped.set(section.id, { ...section, blocks: [...section.blocks] });
+    }
+  }
+
+  const ordered: SummarySection[] = [];
+  for (const preset of SECTION_PRESETS) {
+    const matched = grouped.get(preset.id);
+    if (matched && matched.blocks.length) {
+      ordered.push({ ...matched, title: preset.label });
+      grouped.delete(preset.id);
+    }
+  }
+
+  for (const leftover of grouped.values()) {
+    if (leftover.blocks.length) {
+      ordered.push(leftover);
+    }
+  }
+
+  return ordered;
 }
 
 function parseSummary(content: string): SummaryBlock[] {
