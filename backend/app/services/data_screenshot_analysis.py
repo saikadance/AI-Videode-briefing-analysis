@@ -16,6 +16,8 @@ async def analyze_data_screenshots(
     manuscript: str = "",
     title: str = "",
     notes: str = "",
+    analysis_stage: str = "",
+    analysis_context: str = "",
 ) -> str:
     if not images:
         raise ValueError("请至少提供一张视频数据截图。")
@@ -25,7 +27,14 @@ async def analyze_data_screenshots(
     try:
         return await request_multimodal_completion(
             system_prompt=_load_skill_prompt(),
-            user_text=_build_user_prompt(manuscript=manuscript, title=title, notes=notes, image_count=len(image_payloads)),
+            user_text=_build_user_prompt(
+                manuscript=manuscript,
+                title=title,
+                notes=notes,
+                analysis_stage=analysis_stage,
+                analysis_context=analysis_context,
+                image_count=len(image_payloads),
+            ),
             images=image_payloads,
             temperature=None,
             model=settings.openai_copy_model,
@@ -34,7 +43,14 @@ async def analyze_data_screenshots(
         if settings.openai_copy_model != settings.openai_model:
             return await request_multimodal_completion(
                 system_prompt=_load_skill_prompt(),
-                user_text=_build_user_prompt(manuscript=manuscript, title=title, notes=notes, image_count=len(image_payloads)),
+                user_text=_build_user_prompt(
+                    manuscript=manuscript,
+                    title=title,
+                    notes=notes,
+                    analysis_stage=analysis_stage,
+                    analysis_context=analysis_context,
+                    image_count=len(image_payloads),
+                ),
                 images=image_payloads,
                 temperature=0.4,
                 model=settings.openai_model,
@@ -66,9 +82,23 @@ def _prepare_image_payload(image: dict[str, str | bytes]) -> dict[str, str]:
     raise ValueError("截图缺少可访问地址，无法提交给 AI 做读图分析。")
 
 
-def _build_user_prompt(*, manuscript: str, title: str, notes: str, image_count: int) -> str:
+def _build_user_prompt(
+    *,
+    manuscript: str,
+    title: str,
+    notes: str,
+    analysis_stage: str,
+    analysis_context: str,
+    image_count: int,
+) -> str:
     title_block = f"拟定标题/定位：{title.strip()}" if title.strip() else "拟定标题/定位：未提供"
-    notes_block = f"补充说明：{notes.strip()}" if notes.strip() else "补充说明：无"
+    notes_block = f"补充备注：{notes.strip()}" if notes.strip() else "补充备注：无"
+    stage_mapping = {
+        "pre_publish": "发布前审稿",
+        "post_publish": "发布后复盘",
+    }
+    stage_block = f"当前分析阶段：{stage_mapping.get(analysis_stage.strip(), analysis_stage.strip() or '未指定')}"
+    context_block = f"分析上下文：{analysis_context.strip()}" if analysis_context.strip() else "分析上下文：无"
     manuscript_block = manuscript.strip() if manuscript.strip() else "当前未附带文稿正文，请仅根据截图做视频数据判断。"
     return (
         "下面是 B 站后台或相关视频数据截图，请你像资深内容运营一样直接读图分析。"
@@ -77,7 +107,9 @@ def _build_user_prompt(*, manuscript: str, title: str, notes: str, image_count: 
         "\n\n"
         f"截图数量：{image_count}\n"
         f"{title_block}\n"
-        f"{notes_block}\n\n"
+        f"{notes_block}\n"
+        f"{stage_block}\n"
+        f"{context_block}\n\n"
         "当前文稿上下文：\n"
         f"{manuscript_block}"
     )

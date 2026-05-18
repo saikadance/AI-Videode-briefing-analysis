@@ -95,12 +95,22 @@ def analyze_copy():
     manuscript = str(payload.get("manuscript") or "").strip()
     title = str(payload.get("title") or "").strip()
     notes = str(payload.get("notes") or "").strip()
+    analysis_stage = str(payload.get("analysis_stage") or "").strip()
+    analysis_context = str(payload.get("analysis_context") or "").strip()
 
     if not manuscript:
         return jsonify({"detail": "请输入需要分析的文案或文稿正文。"}), 400
 
     try:
-        analysis = asyncio.run(analyze_copywriting(manuscript=manuscript, title=title, notes=notes))
+        analysis = asyncio.run(
+            analyze_copywriting(
+                manuscript=manuscript,
+                title=title,
+                notes=notes,
+                analysis_stage=analysis_stage,
+                analysis_context=analysis_context,
+            )
+        )
     except Exception as exc:
         return jsonify({"detail": str(exc) or "AI 文案分析失败，请稍后重试。"}), 502
 
@@ -113,6 +123,8 @@ def analyze_data_screenshot_input():
     manuscript = str(request.form.get("manuscript") or "").strip()
     title = str(request.form.get("title") or "").strip()
     notes = str(request.form.get("notes") or "").strip()
+    analysis_stage = str(request.form.get("analysis_stage") or "").strip()
+    analysis_context = str(request.form.get("analysis_context") or "").strip()
 
     if not image_files:
         return jsonify({"detail": "请至少粘贴或上传一张视频数据截图。"}), 400
@@ -142,6 +154,8 @@ def analyze_data_screenshot_input():
                 manuscript=manuscript,
                 title=title,
                 notes=notes,
+                analysis_stage=analysis_stage,
+                analysis_context=analysis_context,
             )
         )
     except ValueError as exc:
@@ -173,6 +187,8 @@ def project_chat():
     title = str(payload.get("title") or "").strip()
     notes = str(payload.get("notes") or "").strip()
     manuscript = str(payload.get("manuscript") or "").strip()
+    analysis_stage = str(payload.get("analysis_stage") or "").strip()
+    analysis_context = str(payload.get("analysis_context") or "").strip()
     latest_copy_analysis = str(payload.get("latest_copy_analysis") or "").strip()
     latest_metrics_analysis = str(payload.get("latest_metrics_analysis") or "").strip()
     latest_community_analysis = str(payload.get("latest_community_analysis") or "").strip()
@@ -206,6 +222,8 @@ def project_chat():
                 title=title,
                 notes=notes,
                 manuscript=manuscript,
+                analysis_stage=analysis_stage,
+                analysis_context=analysis_context,
                 latest_copy_analysis=latest_copy_analysis,
                 latest_metrics_analysis=latest_metrics_analysis,
                 latest_community_analysis=latest_community_analysis,

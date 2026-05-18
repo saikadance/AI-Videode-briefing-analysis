@@ -65,6 +65,8 @@ export async function analyzeCopy(input: {
   manuscript: string;
   title: string;
   notes: string;
+  analysisStage: "pre_publish" | "post_publish";
+  analysisContext: string;
 }): Promise<CopyAnalysisResult> {
   const response = await fetch("/api/analyze/copy", {
     method: "POST",
@@ -74,7 +76,9 @@ export async function analyzeCopy(input: {
     body: JSON.stringify({
       manuscript: input.manuscript,
       title: input.title,
-      notes: input.notes
+      notes: input.notes,
+      analysis_stage: input.analysisStage,
+      analysis_context: input.analysisContext,
     })
   });
 
@@ -90,6 +94,8 @@ export async function analyzeDataScreenshots(input: {
   manuscript: string;
   title: string;
   notes: string;
+  analysisStage: "pre_publish" | "post_publish";
+  analysisContext: string;
 }): Promise<DataScreenshotAnalysisResult> {
   const formData = new FormData();
   input.images.forEach((image) => {
@@ -98,6 +104,8 @@ export async function analyzeDataScreenshots(input: {
   formData.append("manuscript", input.manuscript);
   formData.append("title", input.title);
   formData.append("notes", input.notes);
+  formData.append("analysis_stage", input.analysisStage);
+  formData.append("analysis_context", input.analysisContext);
 
   const response = await fetch("/api/analyze/data-screenshots", {
     method: "POST",
@@ -115,6 +123,8 @@ export async function chatWithProject(input: {
   title: string;
   notes: string;
   manuscript: string;
+  analysisStage: "pre_publish" | "post_publish";
+  analysisContext: string;
   latestCopyAnalysis?: string;
   latestMetricsAnalysis?: string;
   latestCommunityAnalysis?: string;
@@ -133,6 +143,8 @@ export async function chatWithProject(input: {
       title: input.title,
       notes: input.notes,
       manuscript: input.manuscript,
+      analysis_stage: input.analysisStage,
+      analysis_context: input.analysisContext,
       latest_copy_analysis: input.latestCopyAnalysis ?? "",
       latest_metrics_analysis: input.latestMetricsAnalysis ?? "",
       latest_community_analysis: input.latestCommunityAnalysis ?? "",

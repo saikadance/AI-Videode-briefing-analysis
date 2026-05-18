@@ -25,6 +25,14 @@ interface BootState {
   initialActiveProjectId: string | null;
 }
 
+function getDefaultAnalysisContext(stage: "pre_publish" | "post_publish") {
+  if (stage === "post_publish") {
+    return "这条视频已经发布。请按复盘视角判断：现有文稿和当前数据是否匹配，哪些判断已经被数据验证，哪些地方该作为下一轮改稿和包装优化重点。";
+  }
+
+  return "这条视频还未发布。请按审稿视角判断：标题、开头钩子、结构节奏、信息门槛和互动点是否足够支撑上线表现，并优先给出最该先改的部分。";
+}
+
 function sortProjects(projects: ProjectRecord[]) {
   return [...projects].sort(
     (left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()
@@ -38,6 +46,8 @@ function createProjectRecord(): ProjectRecord {
     title: "",
     notes: "",
     manuscript: "",
+    analysisStage: "pre_publish",
+    analysisContext: getDefaultAnalysisContext("pre_publish"),
     createdAt: now,
     updatedAt: now,
     messages: [],
@@ -48,7 +58,14 @@ function createProjectRecord(): ProjectRecord {
 }
 
 function bootstrapProjects(): BootState {
-  const loadedProjects = sortProjects(loadProjects());
+  const loadedProjects = sortProjects(loadProjects()).map((project) => ({
+    ...project,
+    analysisStage: project.analysisStage === "post_publish" ? "post_publish" : "pre_publish",
+    analysisContext:
+      typeof project.analysisContext === "string" && project.analysisContext.trim()
+        ? project.analysisContext
+        : getDefaultAnalysisContext(project.analysisStage === "post_publish" ? "post_publish" : "pre_publish"),
+  }));
   const initialProjects = loadedProjects.length ? loadedProjects : [createProjectRecord()];
   const savedActiveProjectId = loadActiveProjectId();
   const initialActiveProjectId =
@@ -244,13 +261,44 @@ export default function App() {
     );
   };
 
-  const updateActiveProjectField = (field: "title" | "notes" | "manuscript", value: string) => {
+  const updateActiveProjectField = (
+    field: "title" | "notes" | "manuscript" | "analysisContext",
+    value: string
+  ) => {
     if (!activeProjectId) {
       return;
     }
     updateProject(activeProjectId, (project) => ({
       ...project,
       [field]: value,
+    }));
+  };
+
+  const handleAnalysisStageChange = (stage: "pre_publish" | "post_publish") => {
+    if (!activeProjectId) {
+      return;
+    }
+    updateProject(activeProjectId, (project) => {
+      const previousDefault = getDefaultAnalysisContext(project.analysisStage);
+      const nextDefault = getDefaultAnalysisContext(stage);
+      const shouldReplaceContext =
+        !project.analysisContext.trim() || project.analysisContext.trim() === previousDefault;
+
+      return {
+        ...project,
+        analysisStage: stage,
+        analysisContext: shouldReplaceContext ? nextDefault : project.analysisContext,
+      };
+    });
+  };
+
+  const applyDefaultAnalysisContext = () => {
+    if (!activeProjectId || !activeProject) {
+      return;
+    }
+    updateProject(activeProjectId, (project) => ({
+      ...project,
+      analysisContext: getDefaultAnalysisContext(project.analysisStage),
     }));
   };
 
@@ -281,6 +329,8 @@ export default function App() {
         manuscript: activeProject.manuscript,
         title: activeProject.title,
         notes: activeProject.notes,
+        analysisStage: activeProject.analysisStage,
+        analysisContext: activeProject.analysisContext,
       });
 
       updateProject(activeProject.id, (project) => ({
@@ -330,6 +380,8 @@ export default function App() {
           manuscript: activeProject.manuscript,
           title: activeProject.title,
           notes: activeProject.notes,
+          analysisStage: activeProject.analysisStage,
+          analysisContext: activeProject.analysisContext,
         });
 
         updateProject(activeProject.id, (project) => ({
@@ -396,6 +448,8 @@ export default function App() {
         title: activeProject.title,
         notes: activeProject.notes,
         manuscript: activeProject.manuscript,
+        analysisStage: activeProject.analysisStage,
+        analysisContext: activeProject.analysisContext,
         latestCopyAnalysis: activeProject.latestCopyAnalysis ?? "",
         latestMetricsAnalysis: activeProject.latestMetricsAnalysis ?? "",
         latestCommunityAnalysis: serializeCommunityAnalysis(activeProject.latestCommunityAnalysis),
@@ -546,17 +600,60 @@ export default function App() {
                       </div>
                       <div className="stack compact">
                         <label className="field-label" htmlFor="copyNotes">
-                          补充说明
+                          补充备注
                         </label>
                         <input
                           id="copyNotes"
                           className="text-input"
-                          placeholder="例如：准备发 B 站、担心点击率、想保留采访质感"
+                          placeholder="例如：想保留采访质感、这是系列第二条、视频时长目标 8 分钟"
                           value={activeProject?.notes ?? ""}
                           onChange={(event) => updateActiveProjectField("notes", event.target.value)}
                         />
                       </div>
                     </div>
+
+                    <div className="two-column copy-meta-grid">
+                      <div className="stack compact">
+                        <label className="field-label" htmlFor="analysisStage">
+                          分析阶段
+                        </label>
+                        <select
+                          id="analysisStage"
+                          className="text-input"
+                          value={activeProject?.analysisStage ?? "pre_publish"}
+                          onChange={(event) =>
+                            handleAnalysisStageChange(event.target.value as "pre_publish" | "post_publish")
+                          }
+                        >
+                          <option value="pre_publish">发布前审稿</option>
+                          <option value="post_publish">发布后复盘</option>
+                        </select>
+                      </div>
+                      <div className="stack compact">
+                        <label className="field-label" htmlFor="analysisContextAction">
+                          默认上下文模板
+                        </label>
+                        <button
+                          id="analysisContextAction"
+                          className="summary-nav-button context-apply-button"
+                          type="button"
+                          onClick={applyDefaultAnalysisContext}
+                        >
+                          重新套用当前阶段模板
+                        </button>
+                      </div>
+                    </div>
+
+                    <label className="field-label" htmlFor="analysisContext">
+                      分析上下文
+                    </label>
+                    <textarea
+                      id="analysisContext"
+                      className="context-area"
+                      placeholder="这里写清楚这次想让 GPT 站在哪个工作场景下分析。比如：已经发到 B站，播放 38W，互动尚可，现在要做复盘并准备下一版。"
+                      value={activeProject?.analysisContext ?? ""}
+                      onChange={(event) => updateActiveProjectField("analysisContext", event.target.value)}
+                    />
 
                     <label className="field-label" htmlFor="manuscript">
                       文稿 / 文案正文
@@ -570,7 +667,7 @@ export default function App() {
                     />
 
                     <p className="muted">
-                      主分析台负责判断这条稿子是否值得发、最大的结构问题在哪里、应该先改哪里。分析后你可以继续在右侧对话区追问，或者补贴视频数据截图做联合判断。
+                      主分析台现在会把“分析阶段 + 分析上下文 + 文稿正文”一起发给 GPT。分析后你也可以继续在右侧对话区追问，后续对话会继承同一份项目上下文。
                     </p>
                   </section>
 

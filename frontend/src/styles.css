@@ -269,6 +269,22 @@ a {
   line-height: 1.7;
 }
 
+.context-area {
+  width: 100%;
+  min-height: 120px;
+  resize: vertical;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(29, 26, 23, 0.12);
+  background: #fff;
+  color: #1d1a17;
+  line-height: 1.7;
+}
+
+.context-apply-button {
+  justify-self: start;
+}
+
 .copy-meta-grid {
   align-items: end;
 }

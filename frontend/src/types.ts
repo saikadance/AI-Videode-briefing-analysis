@@ -104,6 +104,8 @@ export interface ProjectRecord {
   title: string;
   notes: string;
   manuscript: string;
+  analysisStage: "pre_publish" | "post_publish";
+  analysisContext: string;
   createdAt: string;
   updatedAt: string;
   messages: ProjectMessage[];

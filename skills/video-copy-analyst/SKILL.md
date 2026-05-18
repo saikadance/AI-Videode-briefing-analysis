@@ -42,6 +42,9 @@ Always evaluate the manuscript from these angles:
 7. Data validation awareness:
    When helpful, point out which conclusions still need later validation from click-through, retention, comment sentiment, danmaku density, or other video performance data.
 
+8. Context obedience:
+   Treat the provided `分析阶段` and `分析上下文` as hard constraints. If the context says the video is already published, answer as a复盘分析 instead of a待发布审稿.
+
 ## House Style
 
 Use this response structure unless the user explicitly requests another format:
