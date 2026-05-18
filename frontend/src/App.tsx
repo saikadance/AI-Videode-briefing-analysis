@@ -25,6 +25,10 @@ interface BootState {
   initialActiveProjectId: string | null;
 }
 
+function normalizeAnalysisStage(value: string | undefined): "pre_publish" | "post_publish" {
+  return value === "post_publish" ? "post_publish" : "pre_publish";
+}
+
 function getDefaultAnalysisContext(stage: "pre_publish" | "post_publish") {
   if (stage === "post_publish") {
     return "这条视频已经发布。请按复盘视角判断：现有文稿和当前数据是否匹配，哪些判断已经被数据验证，哪些地方该作为下一轮改稿和包装优化重点。";
@@ -58,14 +62,17 @@ function createProjectRecord(): ProjectRecord {
 }
 
 function bootstrapProjects(): BootState {
-  const loadedProjects = sortProjects(loadProjects()).map((project) => ({
-    ...project,
-    analysisStage: project.analysisStage === "post_publish" ? "post_publish" : "pre_publish",
-    analysisContext:
-      typeof project.analysisContext === "string" && project.analysisContext.trim()
-        ? project.analysisContext
-        : getDefaultAnalysisContext(project.analysisStage === "post_publish" ? "post_publish" : "pre_publish"),
-  }));
+  const loadedProjects = sortProjects(loadProjects()).map((project): ProjectRecord => {
+    const analysisStage = normalizeAnalysisStage(project.analysisStage);
+    return {
+      ...project,
+      analysisStage,
+      analysisContext:
+        typeof project.analysisContext === "string" && project.analysisContext.trim()
+          ? project.analysisContext
+          : getDefaultAnalysisContext(analysisStage),
+    };
+  });
   const initialProjects = loadedProjects.length ? loadedProjects : [createProjectRecord()];
   const savedActiveProjectId = loadActiveProjectId();
   const initialActiveProjectId =
