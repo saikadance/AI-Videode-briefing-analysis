@@ -7,7 +7,9 @@ from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from app.models import CombinedAnalysisResponse, CopyAnalysisResponse, DataScreenshotAnalysisResponse
+import json
+
+from app.models import CombinedAnalysisResponse, CopyAnalysisResponse, DataScreenshotAnalysisResponse, ProjectChatResponse
 from app.services.ai_summary import generate_ai_summary
 from app.services.bilibili_service import BilibiliFetchError, fetch_bilibili_payload
 from app.services.comment_service import analyze_comments
@@ -15,6 +17,7 @@ from app.services.copy_analysis import analyze_copywriting
 from app.services.data_screenshot_analysis import analyze_data_screenshots
 from app.services.danmaku_service import analyze_danmaku
 from app.services.parsers import parse_comments, parse_danmaku
+from app.services.project_chat import reply_in_project_chat
 from app.services.temp_image_store import resolve_temp_image, save_temp_image
 
 
@@ -155,6 +158,68 @@ def analyze_data_screenshot_input():
             manuscript_attached=bool(manuscript),
         ).to_dict()
     )
+
+
+@app.post("/api/projects/chat")
+def project_chat():
+    payload_raw = request.form.get("payload", "")
+    image_files = request.files.getlist("images")
+
+    try:
+        payload = json.loads(payload_raw) if payload_raw else {}
+    except json.JSONDecodeError:
+        return jsonify({"detail": "项目对话请求格式错误，无法解析 payload。"}), 400
+
+    title = str(payload.get("title") or "").strip()
+    notes = str(payload.get("notes") or "").strip()
+    manuscript = str(payload.get("manuscript") or "").strip()
+    latest_copy_analysis = str(payload.get("latest_copy_analysis") or "").strip()
+    latest_metrics_analysis = str(payload.get("latest_metrics_analysis") or "").strip()
+    latest_community_analysis = str(payload.get("latest_community_analysis") or "").strip()
+    user_message = str(payload.get("message") or "").strip()
+    history = payload.get("history") or []
+    attachment_meta = payload.get("attachments") or []
+
+    if not user_message and not image_files:
+        return jsonify({"detail": "请输入对话内容，或至少附上一张图片。"}), 400
+
+    base_url = request.host_url.rstrip("/")
+    attachments: list[dict[str, str]] = []
+    for index, image_file in enumerate(image_files):
+        raw_bytes = image_file.read()
+        if not raw_bytes:
+            continue
+        image_name = save_temp_image(filename=image_file.filename or "chat-image.png", content=raw_bytes)
+        meta = attachment_meta[index] if index < len(attachment_meta) and isinstance(attachment_meta[index], dict) else {}
+        attachments.append(
+            {
+                "name": str(meta.get("name") or image_file.filename or "未命名图片"),
+                "kind": str(meta.get("kind") or "reference"),
+                "mime_type": image_file.mimetype or "application/octet-stream",
+                "public_url": f"{base_url}/api/tmp-image/{image_name}",
+            }
+        )
+
+    try:
+        reply = asyncio.run(
+            reply_in_project_chat(
+                title=title,
+                notes=notes,
+                manuscript=manuscript,
+                latest_copy_analysis=latest_copy_analysis,
+                latest_metrics_analysis=latest_metrics_analysis,
+                latest_community_analysis=latest_community_analysis,
+                history=history if isinstance(history, list) else [],
+                user_message=user_message,
+                attachments=attachments,
+            )
+        )
+    except ValueError as exc:
+        return jsonify({"detail": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"detail": str(exc) or "项目对话分析失败，请稍后重试。"}), 502
+
+    return jsonify(ProjectChatResponse(reply=reply, attachment_count=len(attachments)).to_dict())
 
 
 @app.get("/api/tmp-image/<path:image_name>")

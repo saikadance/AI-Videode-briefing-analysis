@@ -107,3 +107,12 @@ class DataScreenshotAnalysisResponse:
 
     def to_dict(self) -> dict:
         return asdict(self)
+
+
+@dataclass(slots=True)
+class ProjectChatResponse:
+    reply: str
+    attachment_count: int = 0
+
+    def to_dict(self) -> dict:
+        return asdict(self)

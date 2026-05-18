@@ -64,6 +64,15 @@ a {
   z-index: 1;
 }
 
+.hero-actions {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 24px;
+}
+
 .eyebrow {
   margin: 0 0 10px;
   letter-spacing: 0.16em;
@@ -572,6 +581,12 @@ blockquote {
   cursor: pointer;
 }
 
+.summary-nav-button.active-chip {
+  background: linear-gradient(135deg, #ef7d32, #c95c0f);
+  color: #fff;
+  border-color: transparent;
+}
+
 .summary-nav-button:disabled {
   opacity: 0.45;
   cursor: default;
@@ -705,6 +720,182 @@ blockquote {
   gap: 18px;
 }
 
+.recent-projects-panel,
+.project-list-panel,
+.project-storage-note {
+  background: linear-gradient(180deg, rgba(255, 252, 246, 0.95), rgba(252, 246, 237, 0.92));
+}
+
+.recent-project-grid,
+.project-list-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.recent-project-card,
+.project-card {
+  display: grid;
+  gap: 8px;
+  text-align: left;
+  padding: 18px;
+  border-radius: 22px;
+  border: 1px solid rgba(29, 26, 23, 0.08);
+  background: rgba(255, 255, 255, 0.82);
+  cursor: pointer;
+  color: #2f261f;
+}
+
+.recent-project-card span,
+.project-card span,
+.recent-project-card small,
+.project-card small {
+  color: #75695d;
+}
+
+.recent-project-card.active,
+.project-card.active {
+  border-color: rgba(201, 92, 15, 0.34);
+  box-shadow: 0 12px 24px rgba(201, 92, 15, 0.14);
+}
+
+.analysis-lab-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.8fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.chat-column {
+  display: grid;
+  gap: 18px;
+}
+
+.chat-thread-panel,
+.chat-composer-panel {
+  background: linear-gradient(180deg, rgba(255, 254, 250, 0.96), rgba(247, 243, 236, 0.92));
+}
+
+.chat-thread {
+  display: grid;
+  gap: 14px;
+  max-height: 780px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.chat-bubble {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 22px;
+  border: 1px solid rgba(29, 26, 23, 0.08);
+}
+
+.chat-bubble.user {
+  background: rgba(255, 247, 237, 0.96);
+}
+
+.chat-bubble.assistant {
+  background: rgba(248, 252, 250, 0.96);
+}
+
+.chat-bubble-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  color: #75695d;
+  font-size: 0.9rem;
+}
+
+.chat-bubble-body {
+  display: grid;
+  gap: 10px;
+}
+
+.chat-bubble-body p {
+  margin: 0;
+  color: #42372f;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.chat-history-attachments,
+.chat-attachment-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.chat-history-attachments {
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
+.chat-history-attachment,
+.chat-attachment-card {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 18px;
+  border: 1px solid rgba(29, 26, 23, 0.08);
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.chat-history-attachment img,
+.chat-attachment-card img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 12px;
+  border: 1px solid rgba(29, 26, 23, 0.08);
+}
+
+.chat-history-attachment figcaption,
+.chat-attachment-meta {
+  display: grid;
+  gap: 2px;
+}
+
+.chat-history-attachment figcaption span,
+.chat-attachment-meta span {
+  color: #75695d;
+  font-size: 0.9rem;
+}
+
+.chat-attachment-meta select {
+  margin-top: 6px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(29, 26, 23, 0.12);
+  background: #fff;
+}
+
+.chat-input {
+  width: 100%;
+  min-height: 180px;
+  resize: vertical;
+  padding: 16px 18px;
+  border-radius: 22px;
+  border: 1px solid rgba(29, 26, 23, 0.12);
+  background: #fff;
+  color: #1d1a17;
+  line-height: 1.7;
+}
+
+.project-empty {
+  display: grid;
+  gap: 8px;
+  padding: 18px;
+  border-radius: 20px;
+  background: rgba(255, 251, 245, 0.88);
+  border: 1px dashed rgba(29, 26, 23, 0.12);
+}
+
+.project-empty h3,
+.project-empty p {
+  margin: 0;
+}
+
 .summary-tab,
 .result-tab {
   min-height: 44px;
@@ -768,12 +959,14 @@ blockquote {
   .stats-grid,
   .quote-grid,
   .comparison-grid,
-  .image-preview-grid {
+  .image-preview-grid,
+  .analysis-lab-grid {
     grid-template-columns: 1fr;
   }
 
   .panel-header,
-  .segment-meta {
+  .segment-meta,
+  .chat-bubble-header {
     align-items: flex-start;
     flex-direction: column;
   }

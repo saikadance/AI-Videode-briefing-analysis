@@ -78,3 +78,41 @@ export interface DataScreenshotAnalysisResult {
   notes: string;
   manuscript_attached: boolean;
 }
+
+export type ProjectAttachmentKind = "data" | "reference";
+
+export interface ProjectAttachment {
+  id: string;
+  name: string;
+  mimeType: string;
+  dataUrl: string;
+  kind: ProjectAttachmentKind;
+  createdAt: string;
+}
+
+export interface ProjectMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  createdAt: string;
+  attachments: ProjectAttachment[];
+  source: "chat" | "copy-analysis" | "metrics-analysis" | "community-analysis";
+}
+
+export interface ProjectRecord {
+  id: string;
+  title: string;
+  notes: string;
+  manuscript: string;
+  createdAt: string;
+  updatedAt: string;
+  messages: ProjectMessage[];
+  latestCopyAnalysis?: string | null;
+  latestMetricsAnalysis?: string | null;
+  latestCommunityAnalysis?: CombinedAnalysis | null;
+}
+
+export interface ProjectChatResult {
+  reply: string;
+  attachment_count: number;
+}

@@ -1,12 +1,16 @@
-import { FormEvent, Suspense, lazy, useState } from "react";
-import { analyzeBilibili, analyzeCopy, analyzeDataScreenshots, analyzeFiles } from "./api";
+import { FormEvent, Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
+import { analyzeBilibili, analyzeCopy, analyzeDataScreenshots, analyzeFiles, chatWithProject } from "./api";
 import { AiSummary } from "./components/AiSummary";
+import { ChatComposer, PendingAttachment } from "./components/ChatComposer";
+import { ChatThread } from "./components/ChatThread";
 import { CommentSummary } from "./components/CommentSummary";
 import { FileUploader } from "./components/FileUploader";
 import { ImagePasteUploader } from "./components/ImagePasteUploader";
 import { PeakSegments } from "./components/PeakSegments";
+import { ProjectList } from "./components/ProjectList";
 import { SourceSummary } from "./components/SourceSummary";
-import { CombinedAnalysis, CopyAnalysisResult, DataScreenshotAnalysisResult } from "./types";
+import { loadActiveProjectId, loadProjects, saveActiveProjectId, saveProjects } from "./projectStore";
+import { CombinedAnalysis, ProjectAttachment, ProjectMessage, ProjectRecord } from "./types";
 
 const DanmakuTimeline = lazy(() =>
   import("./components/DanmakuTimeline").then((module) => ({ default: module.DanmakuTimeline }))
@@ -14,70 +18,288 @@ const DanmakuTimeline = lazy(() =>
 
 type AssistMode = "metrics" | "bilibili" | "files";
 type ResultView = "copy" | "metrics" | "community";
+type WorkspaceView = "workspace" | "projects";
+
+interface BootState {
+  initialProjects: ProjectRecord[];
+  initialActiveProjectId: string | null;
+}
+
+function sortProjects(projects: ProjectRecord[]) {
+  return [...projects].sort(
+    (left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()
+  );
+}
+
+function createProjectRecord(): ProjectRecord {
+  const now = new Date().toISOString();
+  return {
+    id: crypto.randomUUID(),
+    title: "",
+    notes: "",
+    manuscript: "",
+    createdAt: now,
+    updatedAt: now,
+    messages: [],
+    latestCopyAnalysis: null,
+    latestMetricsAnalysis: null,
+    latestCommunityAnalysis: null,
+  };
+}
+
+function bootstrapProjects(): BootState {
+  const loadedProjects = sortProjects(loadProjects());
+  const initialProjects = loadedProjects.length ? loadedProjects : [createProjectRecord()];
+  const savedActiveProjectId = loadActiveProjectId();
+  const initialActiveProjectId =
+    savedActiveProjectId && initialProjects.some((project) => project.id === savedActiveProjectId)
+      ? savedActiveProjectId
+      : initialProjects[0]?.id ?? null;
+
+  return {
+    initialProjects,
+    initialActiveProjectId,
+  };
+}
+
+function defaultResultView(project: ProjectRecord | null): ResultView {
+  if (project?.latestCopyAnalysis) {
+    return "copy";
+  }
+  if (project?.latestMetricsAnalysis) {
+    return "metrics";
+  }
+  if (project?.latestCommunityAnalysis) {
+    return "community";
+  }
+  return "copy";
+}
+
+function createAssistantMessage(content: string, source: ProjectMessage["source"]): ProjectMessage {
+  return {
+    id: crypto.randomUUID(),
+    role: "assistant",
+    content,
+    createdAt: new Date().toISOString(),
+    attachments: [],
+    source,
+  };
+}
+
+function createUserMessage(content: string, attachments: ProjectAttachment[]): ProjectMessage {
+  return {
+    id: crypto.randomUUID(),
+    role: "user",
+    content,
+    createdAt: new Date().toISOString(),
+    attachments,
+    source: "chat",
+  };
+}
+
+function serializeCommunityAnalysis(result: CombinedAnalysis | null | undefined) {
+  if (!result) {
+    return "";
+  }
+
+  const peakSegments = result.danmaku.peak_segments
+    .slice(0, 3)
+    .map(
+      (segment) =>
+        `${formatTime(segment.start_second)}-${formatTime(segment.end_second)}：${segment.summary}`
+    )
+    .join("\n");
+
+  const topWords = result.comments.high_frequency_words
+    .slice(0, 8)
+    .map((item) => `${item.word}(${item.count})`)
+    .join("、");
+
+  return [
+    result.source ? `视频：${result.source.title}` : "",
+    result.ai_summary ? `AI 总结：${result.ai_summary}` : "",
+    `评论总数：${result.comments.total_comments}`,
+    `弹幕总数：${result.danmaku.total_danmaku}`,
+    topWords ? `高频词：${topWords}` : "",
+    peakSegments ? `高能区间：\n${peakSegments}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function formatTime(totalSeconds: number) {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
+function fileToDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
+    reader.onerror = () => reject(new Error("图片读取失败"));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function buildStoredAttachments(attachments: PendingAttachment[]): Promise<ProjectAttachment[]> {
+  const now = new Date().toISOString();
+  return Promise.all(
+    attachments.map(async (attachment) => ({
+      id: crypto.randomUUID(),
+      name: attachment.file.name || "未命名图片",
+      mimeType: attachment.file.type || "image/png",
+      dataUrl: await fileToDataUrl(attachment.file),
+      kind: attachment.kind,
+      createdAt: now,
+    }))
+  );
+}
+
+function buildProjectHistory(messages: ProjectMessage[]) {
+  return messages.map((message) => ({
+    role: message.role,
+    content: message.content,
+    attachments: message.attachments.map((attachment) => ({
+      name: attachment.name,
+      kind: attachment.kind,
+    })),
+  }));
+}
+
+function getProjectDisplayTitle(project: ProjectRecord) {
+  return project.title.trim() || "未命名";
+}
 
 export default function App() {
+  const [bootState] = useState<BootState>(() => bootstrapProjects());
+  const [projects, setProjects] = useState<ProjectRecord[]>(bootState.initialProjects);
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(bootState.initialActiveProjectId);
+  const [workspaceView, setWorkspaceView] = useState<WorkspaceView>("workspace");
   const [assistMode, setAssistMode] = useState<AssistMode>("metrics");
   const [videoInput, setVideoInput] = useState("");
   const [commentsFile, setCommentsFile] = useState<File | null>(null);
   const [danmakuFile, setDanmakuFile] = useState<File | null>(null);
   const [metricImages, setMetricImages] = useState<File[]>([]);
-  const [copyTitle, setCopyTitle] = useState("");
-  const [copyNotes, setCopyNotes] = useState("");
-  const [manuscript, setManuscript] = useState("");
   const [useAi, setUseAi] = useState(true);
   const [bucketSize, setBucketSize] = useState(1);
   const [copyLoading, setCopyLoading] = useState(false);
   const [assistLoading, setAssistLoading] = useState(false);
+  const [chatLoading, setChatLoading] = useState(false);
   const [copyError, setCopyError] = useState<string | null>(null);
   const [assistError, setAssistError] = useState<string | null>(null);
-  const [result, setResult] = useState<CombinedAnalysis | null>(null);
-  const [copyResult, setCopyResult] = useState<CopyAnalysisResult | null>(null);
-  const [metricResult, setMetricResult] = useState<DataScreenshotAnalysisResult | null>(null);
+  const [chatError, setChatError] = useState<string | null>(null);
   const [resultView, setResultView] = useState<ResultView>("copy");
+  const resultSectionRef = useRef<HTMLElement | null>(null);
+
+  const orderedProjects = useMemo(() => sortProjects(projects), [projects]);
+  const activeProject = useMemo(
+    () => orderedProjects.find((project) => project.id === activeProjectId) ?? null,
+    [orderedProjects, activeProjectId]
+  );
+  const recentProjects = useMemo(() => orderedProjects.slice(0, 4), [orderedProjects]);
+
+  useEffect(() => {
+    if (!projects.length) {
+      const freshProject = createProjectRecord();
+      setProjects([freshProject]);
+      setActiveProjectId(freshProject.id);
+      return;
+    }
+
+    if (!activeProjectId || !projects.some((project) => project.id === activeProjectId)) {
+      setActiveProjectId(projects[0].id);
+    }
+  }, [projects, activeProjectId]);
+
+  useEffect(() => {
+    saveProjects(projects);
+  }, [projects]);
+
+  useEffect(() => {
+    saveActiveProjectId(activeProjectId);
+  }, [activeProjectId]);
+
+  useEffect(() => {
+    setResultView(defaultResultView(activeProject));
+    setCopyError(null);
+    setAssistError(null);
+    setChatError(null);
+  }, [activeProjectId]);
+
+  const updateProject = (projectId: string, updater: (project: ProjectRecord) => ProjectRecord) => {
+    setProjects((current) =>
+      sortProjects(
+        current.map((project) => {
+          if (project.id !== projectId) {
+            return project;
+          }
+          const next = updater(project);
+          return {
+            ...next,
+            updatedAt: new Date().toISOString(),
+          };
+        })
+      )
+    );
+  };
+
+  const updateActiveProjectField = (field: "title" | "notes" | "manuscript", value: string) => {
+    if (!activeProjectId) {
+      return;
+    }
+    updateProject(activeProjectId, (project) => ({
+      ...project,
+      [field]: value,
+    }));
+  };
+
+  const handleCreateProject = () => {
+    const freshProject = createProjectRecord();
+    setProjects((current) => sortProjects([freshProject, ...current]));
+    setActiveProjectId(freshProject.id);
+    setWorkspaceView("workspace");
+    setResultView("copy");
+  };
+
+  const handleSelectProject = (projectId: string) => {
+    setActiveProjectId(projectId);
+    setWorkspaceView("workspace");
+  };
 
   const handleCopySubmit = async (event: FormEvent) => {
     event.preventDefault();
+    if (!activeProject) {
+      return;
+    }
+
     setCopyLoading(true);
     setCopyError(null);
 
     try {
-      const analysis = await analyzeCopy({ manuscript, title: copyTitle, notes: copyNotes });
-      setCopyResult(analysis);
+      const analysis = await analyzeCopy({
+        manuscript: activeProject.manuscript,
+        title: activeProject.title,
+        notes: activeProject.notes,
+      });
+
+      updateProject(activeProject.id, (project) => ({
+        ...project,
+        latestCopyAnalysis: analysis.analysis,
+        messages: [
+          ...project.messages,
+          createAssistantMessage("已完成文稿分析，结果已保存到“文稿分析”页，可以继续追问和改稿。", "copy-analysis"),
+        ],
+      }));
+
       setResultView("copy");
+      window.setTimeout(() => {
+        resultSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 80);
     } catch (submitError) {
-      setCopyError(submitError instanceof Error ? submitError.message : "分析失败");
+      setCopyError(submitError instanceof Error ? submitError.message : "文稿分析失败");
     } finally {
       setCopyLoading(false);
-    }
-  };
-
-  const handleAssistSubmit = async (event: FormEvent) => {
-    event.preventDefault();
-    setAssistLoading(true);
-    setAssistError(null);
-
-    try {
-      if (assistMode === "metrics") {
-        const screenshotAnalysis = await analyzeDataScreenshots({
-          images: metricImages,
-          manuscript,
-          title: copyTitle,
-          notes: copyNotes,
-        });
-        setMetricResult(screenshotAnalysis);
-        setResultView("metrics");
-      } else {
-        const analysis =
-          assistMode === "bilibili"
-            ? await analyzeBilibili({ videoInput, useAi })
-            : await submitFiles();
-        setResult(analysis);
-        setResultView("community");
-      }
-    } catch (submitError) {
-      setAssistError(submitError instanceof Error ? submitError.message : "分析失败");
-    } finally {
-      setAssistLoading(false);
     }
   };
 
@@ -88,261 +310,465 @@ export default function App() {
     return analyzeFiles({ commentsFile, danmakuFile, useAi });
   };
 
+  const handleAssistSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!activeProject) {
+      return;
+    }
+
+    setAssistLoading(true);
+    setAssistError(null);
+
+    try {
+      if (assistMode === "metrics") {
+        if (!metricImages.length) {
+          throw new Error("请先添加至少一张视频数据截图。");
+        }
+
+        const screenshotAnalysis = await analyzeDataScreenshots({
+          images: metricImages,
+          manuscript: activeProject.manuscript,
+          title: activeProject.title,
+          notes: activeProject.notes,
+        });
+
+        updateProject(activeProject.id, (project) => ({
+          ...project,
+          latestMetricsAnalysis: screenshotAnalysis.analysis,
+          messages: [
+            ...project.messages,
+            createAssistantMessage("已完成数据截图分析，结果已保存到“数据截图”页。", "metrics-analysis"),
+          ],
+        }));
+
+        setMetricImages([]);
+        setResultView("metrics");
+        window.setTimeout(() => {
+          resultSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 80);
+      } else {
+        const analysis =
+          assistMode === "bilibili"
+            ? await analyzeBilibili({ videoInput, useAi })
+            : await submitFiles();
+
+        updateProject(activeProject.id, (project) => ({
+          ...project,
+          latestCommunityAnalysis: analysis,
+          messages: [
+            ...project.messages,
+            createAssistantMessage("已完成评论与弹幕复盘，结果已保存到“评论弹幕”页。", "community-analysis"),
+          ],
+        }));
+
+        setResultView("community");
+        window.setTimeout(() => {
+          resultSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 80);
+      }
+    } catch (submitError) {
+      setAssistError(submitError instanceof Error ? submitError.message : "辅助分析失败");
+    } finally {
+      setAssistLoading(false);
+    }
+  };
+
+  const handleProjectChat = async (payload: { content: string; attachments: PendingAttachment[] }) => {
+    if (!activeProject) {
+      return;
+    }
+
+    setChatLoading(true);
+    setChatError(null);
+
+    const storedAttachments = await buildStoredAttachments(payload.attachments);
+    const userContent = payload.content.trim() || "附上了新的图片，请结合当前项目继续分析。";
+    const userMessage = createUserMessage(userContent, storedAttachments);
+    const nextHistory = [...activeProject.messages, userMessage];
+
+    updateProject(activeProject.id, (project) => ({
+      ...project,
+      messages: [...project.messages, userMessage],
+    }));
+
+    try {
+      const response = await chatWithProject({
+        title: activeProject.title,
+        notes: activeProject.notes,
+        manuscript: activeProject.manuscript,
+        latestCopyAnalysis: activeProject.latestCopyAnalysis ?? "",
+        latestMetricsAnalysis: activeProject.latestMetricsAnalysis ?? "",
+        latestCommunityAnalysis: serializeCommunityAnalysis(activeProject.latestCommunityAnalysis),
+        history: buildProjectHistory(nextHistory),
+        message: userContent,
+        attachments: payload.attachments.map((attachment) => ({
+          file: attachment.file,
+          kind: attachment.kind,
+          name: attachment.file.name || "未命名图片",
+        })),
+      });
+
+      updateProject(activeProject.id, (project) => ({
+        ...project,
+        messages: [...project.messages, createAssistantMessage(response.reply, "chat")],
+      }));
+    } catch (requestError) {
+      setChatError(requestError instanceof Error ? requestError.message : "项目对话失败");
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
+  const copyResult = activeProject?.latestCopyAnalysis
+    ? {
+        analysis: activeProject.latestCopyAnalysis,
+        title: activeProject.title,
+        notes: activeProject.notes,
+      }
+    : null;
+
+  const metricResult = activeProject?.latestMetricsAnalysis
+    ? {
+        analysis: activeProject.latestMetricsAnalysis,
+        image_count: 0,
+        title: activeProject.title,
+        notes: activeProject.notes,
+        manuscript_attached: Boolean(activeProject.manuscript.trim()),
+      }
+    : null;
+
+  const communityResult = activeProject?.latestCommunityAnalysis ?? null;
+  const hasAnyResult = Boolean(copyResult || metricResult || communityResult);
+
   return (
     <div className="page-shell">
       <header className="hero">
         <div className="hero-copy">
-          <p className="eyebrow">Video Copy Analysis Studio</p>
-          <h1 className="hero-title">先分析文稿，再让视频数据和评论弹幕做辅助判断。</h1>
+          <p className="eyebrow">Project Copy Review Workspace</p>
+          <h1 className="hero-title">先做文稿主分析，再让数据、评论和弹幕成为持续复盘的辅助证据。</h1>
           <p className="hero-text">
-            当前主功能已经切到文案文稿分析，适合优先判断钩子、结构、包装和留存风险。评论、弹幕和视频数据分析会继续保留，作为后续验证内容效果的辅助链路。
+            现在这套工作台已经支持持续对话、贴图追问和本地项目缓存。每个项目都会在当前浏览器里保留，方便你反复改稿、补数据和继续复盘。
           </p>
+        </div>
+
+        <div className="hero-actions">
+          <button
+            className={workspaceView === "workspace" ? "summary-nav-button active-chip" : "summary-nav-button"}
+            type="button"
+            onClick={() => setWorkspaceView("workspace")}
+          >
+            主分析台
+          </button>
+          <button
+            className={workspaceView === "projects" ? "summary-nav-button active-chip" : "summary-nav-button"}
+            type="button"
+            onClick={() => setWorkspaceView("projects")}
+          >
+            项目列表
+          </button>
+          <button className="primary-button" type="button" onClick={handleCreateProject}>
+            新建项目
+          </button>
         </div>
       </header>
 
       <main className="layout">
-        <section className="workspace-grid">
-          <section className="panel control-panel primary-panel">
-            <div className="panel-header">
-              <div className="stack compact">
-                <span className="section-kicker">主分析台</span>
-                <h2>文案文稿分析</h2>
-              </div>
-              <span className="muted">先判断这稿子值不值得发、该怎么改，再让后续视频数据来验证判断。</span>
-            </div>
-
-            <form className="stack" onSubmit={handleCopySubmit}>
-              <section className="input-card">
-                <div className="two-column copy-meta-grid">
-                  <div className="stack compact">
-                    <label className="field-label" htmlFor="copyTitle">
-                      标题 / 定位
-                    </label>
-                    <input
-                      id="copyTitle"
-                      className="text-input"
-                      placeholder="例如：开发者采访、游戏分析、人物故事、选题包装方向"
-                      value={copyTitle}
-                      onChange={(event) => setCopyTitle(event.target.value)}
-                    />
-                  </div>
-                  <div className="stack compact">
-                    <label className="field-label" htmlFor="copyNotes">
-                      补充说明
-                    </label>
-                    <input
-                      id="copyNotes"
-                      className="text-input"
-                      placeholder="例如：准备发 B 站、10 分钟稿、担心点击率低"
-                      value={copyNotes}
-                      onChange={(event) => setCopyNotes(event.target.value)}
-                    />
-                  </div>
-                </div>
-                <label className="field-label" htmlFor="manuscript">
-                  文案 / 文稿正文
-                </label>
-                <textarea
-                  id="manuscript"
-                  className="text-area"
-                  placeholder="把完整稿件贴到这里，AI 会从专业视频媒体运营视角分析钩子、结构、节奏、包装和改稿方向。"
-                  value={manuscript}
-                  onChange={(event) => setManuscript(event.target.value)}
-                />
-                <p className="muted">
-                  适合优先分析：视频脚本、口播文案、采访稿、选题包装方案、标题方向、开头钩子。后续可再结合评论、弹幕和视频数据做综合判断。
-                </p>
-              </section>
-
-              <div className="toolbar">
-                <div className="muted">优先调用 GPT-5.5 进行文案主分析，如代理兼容异常会自动回退到稳定模型。</div>
-                <button className="primary-button" type="submit" disabled={copyLoading}>
-                  {copyLoading ? "分析中..." : "分析文稿"}
-                </button>
-              </div>
-            </form>
-
-            {copyError ? <div className="error-banner">{copyError}</div> : null}
-          </section>
-
-          <aside className="panel secondary-panel">
-            <div className="stack compact">
-              <span className="section-kicker">辅助分析台</span>
-              <h3>视频数据 / 评论 / 弹幕</h3>
-              <p className="muted auxiliary-copy">
-                这部分用于补充判断视频上线后的观众反馈、后台数据和高能片段。你可以直接粘贴后台截图，让 AI 结合当前文稿一起做联合判断。
-              </p>
-            </div>
-
-            <form className="stack" onSubmit={handleAssistSubmit}>
-              <div className="mode-switch secondary-switch">
-                <button
-                  className={assistMode === "metrics" ? "mode-pill active" : "mode-pill"}
-                  type="button"
-                  onClick={() => setAssistMode("metrics")}
-                >
-                  视频数据截图
-                </button>
-                <button
-                  className={assistMode === "bilibili" ? "mode-pill active" : "mode-pill"}
-                  type="button"
-                  onClick={() => setAssistMode("bilibili")}
-                >
-                  B 站链接抓取
-                </button>
-                <button
-                  className={assistMode === "files" ? "mode-pill active" : "mode-pill"}
-                  type="button"
-                  onClick={() => setAssistMode("files")}
-                >
-                  本地文件导入
-                </button>
-              </div>
-
-              {assistMode === "metrics" ? (
-                <section className="input-card subtle-card">
-                  <label className="field-label">视频数据截图输入</label>
-                  <ImagePasteUploader files={metricImages} onChange={setMetricImages} />
-                  <p className="muted">
-                    推荐粘贴：核心数据汇总、播放趋势、留存/流失、游客吸引力、封面标题点击率、互动率、转粉率等页面截图。当前主分析台里的文稿会自动一起带入做联合分析。
-                  </p>
-                </section>
-              ) : assistMode === "bilibili" ? (
-                <section className="input-card subtle-card">
-                  <label className="field-label" htmlFor="videoInput">
-                    B 站视频链接或 BV 号
-                  </label>
-                  <input
-                    id="videoInput"
-                    className="text-input"
-                    placeholder="例如 https://www.bilibili.com/video/BV... 或直接输入 BV 号"
-                    value={videoInput}
-                    onChange={(event) => setVideoInput(event.target.value)}
-                  />
-                  <p className="muted">
-                    支持 `www.bilibili.com/video/...`、`b23.tv/...` 和直接输入 `BV` 号。多 P 视频会自动识别链接里的 `p=` 参数。
-                  </p>
-                </section>
-              ) : (
-                <div className="two-column assist-upload-grid">
-                  <FileUploader
-                    label="评论文件"
-                    accept=".json,.csv"
-                    helper="支持 JSON / CSV，字段可为 content、message、text、comment"
-                    file={commentsFile}
-                    onChange={setCommentsFile}
-                  />
-                  <FileUploader
-                    label="弹幕文件"
-                    accept=".xml,.json"
-                    helper="推荐直接导入 B 站弹幕 XML，也支持 JSON"
-                    file={danmakuFile}
-                    onChange={setDanmakuFile}
-                  />
-                </div>
-              )}
-
-              <div className="toolbar secondary-toolbar">
-                {assistMode !== "metrics" ? (
-                  <label className="toggle">
-                    <input type="checkbox" checked={useAi} onChange={(event) => setUseAi(event.target.checked)} />
-                    <span>生成 AI 辅助摘要</span>
-                  </label>
-                ) : (
-                  <div className="muted">优先调用 GPT-5.5 做视频数据读图分析，并结合当前文稿一起汇总。</div>
-                )}
-
-                <button className="primary-button secondary-button" type="submit" disabled={assistLoading}>
-                  {assistLoading
-                    ? "分析中..."
-                    : assistMode === "metrics"
-                      ? "分析截图"
-                      : assistMode === "bilibili"
-                        ? "抓取并分析"
-                        : "开始分析"}
-                </button>
-              </div>
-            </form>
-
-            {assistError ? <div className="error-banner">{assistError}</div> : null}
-          </aside>
-        </section>
-
-        {copyResult || metricResult || result ? (
+        {workspaceView === "projects" ? (
           <section className="stack">
-            <section className="panel result-shell">
-              <div className="panel-header result-shell-header">
-                <div className="stack compact">
-                  <span className="section-kicker">结果分页</span>
-                  <h2>分析结果台</h2>
-                </div>
-                <span className="muted">将文稿、截图和评论弹幕拆成独立阅读页，减少来回滚动。</span>
-              </div>
+            <ProjectList
+              projects={orderedProjects}
+              activeProjectId={activeProjectId}
+              onSelect={handleSelectProject}
+              onCreate={handleCreateProject}
+            />
 
-              <div className="result-tab-strip">
-                {copyResult ? (
-                  <button
-                    className={resultView === "copy" ? "result-tab active" : "result-tab"}
-                    type="button"
-                    onClick={() => setResultView("copy")}
-                  >
-                    文稿分析
-                  </button>
-                ) : null}
-                {metricResult ? (
-                  <button
-                    className={resultView === "metrics" ? "result-tab active" : "result-tab"}
-                    type="button"
-                    onClick={() => setResultView("metrics")}
-                  >
-                    数据截图
-                  </button>
-                ) : null}
-                {result ? (
-                  <button
-                    className={resultView === "community" ? "result-tab active" : "result-tab"}
-                    type="button"
-                    onClick={() => setResultView("community")}
-                  >
-                    评论弹幕
-                  </button>
-                ) : null}
-              </div>
-
-              <div className="result-page">
-                {resultView === "copy" && copyResult ? (
-                  <AiSummary content={copyResult.analysis} title="AI 文案文稿分析" />
-                ) : null}
-
-                {resultView === "metrics" && metricResult ? (
-                  <AiSummary content={metricResult.analysis} title="AI 视频数据截图分析" />
-                ) : null}
-
-                {resultView === "community" && result ? (
-                  <div className="stack">
-                    {result.source ? <SourceSummary source={result.source} /> : null}
-                    {result.ai_summary ? <AiSummary content={result.ai_summary} /> : null}
-                    <CommentSummary data={result.comments} />
-                    <Suspense fallback={<section className="panel">弹幕时间轴加载中...</section>}>
-                      <DanmakuTimeline
-                        data={result.danmaku}
-                        bucketSize={bucketSize}
-                        onBucketSizeChange={setBucketSize}
-                      />
-                    </Suspense>
-                    <PeakSegments data={result.danmaku} />
-                  </div>
-                ) : null}
+            <section className="panel project-storage-note">
+              <div className="stack compact">
+                <span className="section-kicker">当前缓存方式</span>
+                <h3>项目结果保存在当前浏览器</h3>
+                <p className="muted">
+                  这是为了兼容 Render 免费版的休眠和临时文件限制。现在的项目、对话和已保存结果会在这台设备当前浏览器里保留，但不会自动跨设备同步，后续如果要多人共享，建议再补数据库或导出功能。
+                </p>
               </div>
             </section>
           </section>
         ) : (
-          <section className="panel placeholder-panel">
-            <h2>当前还没有分析结果</h2>
-            <p>
-              先把文稿贴进主分析台，确认这条视频的钩子、结构和包装方向。评论、弹幕和视频数据复盘可以放在后面，作为上线后的辅助验证。
-            </p>
-          </section>
+          <>
+            <section className="panel recent-projects-panel">
+              <div className="panel-header">
+                <div className="stack compact">
+                  <span className="section-kicker">最近项目</span>
+                  <h2>继续上次的工作</h2>
+                </div>
+                <span className="muted">项目名默认取文稿标题，没填标题时会显示为“未命名”。</span>
+              </div>
+
+              <div className="recent-project-grid">
+                {recentProjects.map((project) => (
+                  <button
+                    className={project.id === activeProjectId ? "recent-project-card active" : "recent-project-card"}
+                    key={project.id}
+                    type="button"
+                    onClick={() => handleSelectProject(project.id)}
+                  >
+                    <strong>{getProjectDisplayTitle(project)}</strong>
+                    <span>{project.notes.trim() || "暂无补充说明"}</span>
+                    <small>{new Date(project.updatedAt).toLocaleString("zh-CN")}</small>
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            <section className="workspace-grid">
+              <section className="panel control-panel primary-panel">
+                <div className="panel-header">
+                  <div className="stack compact">
+                    <span className="section-kicker">主分析台</span>
+                    <h2>文稿文案分析</h2>
+                  </div>
+                  <span className="muted">当前项目：{activeProject ? getProjectDisplayTitle(activeProject) : "未命名"}</span>
+                </div>
+
+                <form className="stack" onSubmit={handleCopySubmit}>
+                  <section className="input-card">
+                    <div className="two-column copy-meta-grid">
+                      <div className="stack compact">
+                        <label className="field-label" htmlFor="copyTitle">
+                          标题 / 定位
+                        </label>
+                        <input
+                          id="copyTitle"
+                          className="text-input"
+                          placeholder="例如：B站游戏稿、开发者采访、剧情向长文稿"
+                          value={activeProject?.title ?? ""}
+                          onChange={(event) => updateActiveProjectField("title", event.target.value)}
+                        />
+                      </div>
+                      <div className="stack compact">
+                        <label className="field-label" htmlFor="copyNotes">
+                          补充说明
+                        </label>
+                        <input
+                          id="copyNotes"
+                          className="text-input"
+                          placeholder="例如：准备发 B 站、担心点击率、想保留采访质感"
+                          value={activeProject?.notes ?? ""}
+                          onChange={(event) => updateActiveProjectField("notes", event.target.value)}
+                        />
+                      </div>
+                    </div>
+
+                    <label className="field-label" htmlFor="manuscript">
+                      文稿 / 文案正文
+                    </label>
+                    <textarea
+                      id="manuscript"
+                      className="text-area"
+                      placeholder="把完整文稿贴到这里。分析完成后，结果会跟着这个项目一起缓存在当前浏览器里。"
+                      value={activeProject?.manuscript ?? ""}
+                      onChange={(event) => updateActiveProjectField("manuscript", event.target.value)}
+                    />
+
+                    <p className="muted">
+                      主分析台负责判断这条稿子是否值得发、最大的结构问题在哪里、应该先改哪里。分析后你可以继续在右侧对话区追问，或者补贴视频数据截图做联合判断。
+                    </p>
+                  </section>
+
+                  <div className="toolbar">
+                    <div className="muted">文稿结果会直接保存到当前项目里，后续刷新页面也还能继续对话和修改。</div>
+                    <button className="primary-button" type="submit" disabled={copyLoading}>
+                      {copyLoading ? "分析中..." : "分析文稿"}
+                    </button>
+                  </div>
+                </form>
+
+                {copyError ? <div className="error-banner">{copyError}</div> : null}
+              </section>
+
+              <aside className="panel secondary-panel">
+                <div className="stack compact">
+                  <span className="section-kicker">辅助分析台</span>
+                  <h3>视频数据 / 评论 / 弹幕</h3>
+                  <p className="muted auxiliary-copy">
+                    这部分负责补充上线后的反馈证据。你可以贴后台截图、输入 B 站链接，或者导入本地评论和弹幕，让辅助分析跟当前文稿项目一起工作。
+                  </p>
+                </div>
+
+                <form className="stack" onSubmit={handleAssistSubmit}>
+                  <div className="mode-switch secondary-switch">
+                    <button
+                      className={assistMode === "metrics" ? "mode-pill active" : "mode-pill"}
+                      type="button"
+                      onClick={() => setAssistMode("metrics")}
+                    >
+                      数据截图
+                    </button>
+                    <button
+                      className={assistMode === "bilibili" ? "mode-pill active" : "mode-pill"}
+                      type="button"
+                      onClick={() => setAssistMode("bilibili")}
+                    >
+                      B站抓取
+                    </button>
+                    <button
+                      className={assistMode === "files" ? "mode-pill active" : "mode-pill"}
+                      type="button"
+                      onClick={() => setAssistMode("files")}
+                    >
+                      本地导入
+                    </button>
+                  </div>
+
+                  {assistMode === "metrics" ? (
+                    <section className="input-card subtle-card">
+                      <label className="field-label">视频数据截图输入</label>
+                      <ImagePasteUploader files={metricImages} onChange={setMetricImages} />
+                      <p className="muted">
+                        推荐粘贴核心数据、播放趋势、留存/流失、游客吸引力、点击率、互动率、转粉率等页面截图。AI 会自动结合当前文稿一起判断。
+                      </p>
+                    </section>
+                  ) : assistMode === "bilibili" ? (
+                    <section className="input-card subtle-card">
+                      <label className="field-label" htmlFor="videoInput">
+                        B站视频链接或 BV 号
+                      </label>
+                      <input
+                        id="videoInput"
+                        className="text-input"
+                        placeholder="例如 https://www.bilibili.com/video/BV... 或直接输入 BV 号"
+                        value={videoInput}
+                        onChange={(event) => setVideoInput(event.target.value)}
+                      />
+                      <p className="muted">支持普通视频链接、b23 短链和直接输入 BV 号。</p>
+                    </section>
+                  ) : (
+                    <div className="two-column assist-upload-grid">
+                      <FileUploader
+                        label="评论文件"
+                        accept=".json,.csv"
+                        helper="支持 JSON / CSV，字段可为 content、message、text、comment"
+                        file={commentsFile}
+                        onChange={setCommentsFile}
+                      />
+                      <FileUploader
+                        label="弹幕文件"
+                        accept=".xml,.json"
+                        helper="推荐直接导入 B站 XML 弹幕，也支持 JSON"
+                        file={danmakuFile}
+                        onChange={setDanmakuFile}
+                      />
+                    </div>
+                  )}
+
+                  <div className="toolbar secondary-toolbar">
+                    {assistMode !== "metrics" ? (
+                      <label className="toggle">
+                        <input type="checkbox" checked={useAi} onChange={(event) => setUseAi(event.target.checked)} />
+                        <span>生成 AI 辅助摘要</span>
+                      </label>
+                    ) : (
+                      <div className="muted">当前会优先结合文稿来解读截图数据，而不是只做孤立读图。</div>
+                    )}
+
+                    <button className="primary-button secondary-button" type="submit" disabled={assistLoading}>
+                      {assistLoading
+                        ? "分析中..."
+                        : assistMode === "metrics"
+                          ? "分析截图"
+                          : assistMode === "bilibili"
+                            ? "抓取并分析"
+                            : "开始分析"}
+                    </button>
+                  </div>
+                </form>
+
+                {assistError ? <div className="error-banner">{assistError}</div> : null}
+              </aside>
+            </section>
+
+            <section className="analysis-lab-grid" ref={resultSectionRef}>
+              <section className="stack">
+                {hasAnyResult ? (
+                  <section className="panel result-shell">
+                    <div className="panel-header result-shell-header">
+                      <div className="stack compact">
+                        <span className="section-kicker">项目结果</span>
+                        <h2>已保存分析</h2>
+                      </div>
+                      <span className="muted">结果会跟着当前项目一起缓存，不需要重新滚很长的页面找之前的内容。</span>
+                    </div>
+
+                    <div className="result-tab-strip">
+                      {copyResult ? (
+                        <button
+                          className={resultView === "copy" ? "result-tab active" : "result-tab"}
+                          type="button"
+                          onClick={() => setResultView("copy")}
+                        >
+                          文稿分析
+                        </button>
+                      ) : null}
+                      {metricResult ? (
+                        <button
+                          className={resultView === "metrics" ? "result-tab active" : "result-tab"}
+                          type="button"
+                          onClick={() => setResultView("metrics")}
+                        >
+                          数据截图
+                        </button>
+                      ) : null}
+                      {communityResult ? (
+                        <button
+                          className={resultView === "community" ? "result-tab active" : "result-tab"}
+                          type="button"
+                          onClick={() => setResultView("community")}
+                        >
+                          评论弹幕
+                        </button>
+                      ) : null}
+                    </div>
+
+                    <div className="result-page">
+                      {resultView === "copy" && copyResult ? (
+                        <AiSummary content={copyResult.analysis} title="AI 文稿分析" />
+                      ) : null}
+
+                      {resultView === "metrics" && metricResult ? (
+                        <AiSummary content={metricResult.analysis} title="AI 数据截图分析" />
+                      ) : null}
+
+                      {resultView === "community" && communityResult ? (
+                        <div className="stack">
+                          {communityResult.source ? <SourceSummary source={communityResult.source} /> : null}
+                          {communityResult.ai_summary ? <AiSummary content={communityResult.ai_summary} title="AI 评论弹幕复盘" /> : null}
+                          <CommentSummary data={communityResult.comments} />
+                          <Suspense fallback={<section className="panel">弹幕时间轴加载中...</section>}>
+                            <DanmakuTimeline
+                              data={communityResult.danmaku}
+                              bucketSize={bucketSize}
+                              onBucketSizeChange={setBucketSize}
+                            />
+                          </Suspense>
+                          <PeakSegments data={communityResult.danmaku} />
+                        </div>
+                      ) : null}
+                    </div>
+                  </section>
+                ) : (
+                  <section className="panel placeholder-panel">
+                    <h2>当前项目还没有分析结果</h2>
+                    <p>先运行一次文稿分析，结果就会保存在当前项目里，后续可以继续追问、补图和做二次复盘。</p>
+                  </section>
+                )}
+              </section>
+
+              <aside className="chat-column">
+                <ChatThread messages={activeProject?.messages ?? []} />
+                <ChatComposer loading={chatLoading} onSend={handleProjectChat} />
+                {chatError ? <div className="error-banner">{chatError}</div> : null}
+              </aside>
+            </section>
+          </>
         )}
       </main>
     </div>

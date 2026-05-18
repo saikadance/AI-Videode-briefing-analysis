@@ -85,6 +85,8 @@ Use this response structure unless the user explicitly requests another format:
 - If the strongest素材 appears too late, say which素材 should move into the first 30 seconds.
 - If title/封面/定位 likely attract the wrong audience, state the mismatch clearly.
 - Distinguish clearly between 文稿层的问题 and 只有上线后才能验证的数据层问题.
+- If the supplementary notes clearly say the video has already been published or already has platform data, treat this as a复盘任务 instead of a待发布审稿任务.
+- In that case, avoid default advice like “改后再发”; instead explain whether the current data and the current manuscript are mutually consistent, and what should change in the next iteration.
 
 ## Rewrite Guidance
 

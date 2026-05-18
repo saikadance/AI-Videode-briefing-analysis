@@ -70,6 +70,9 @@ async def request_multimodal_completion(
 
     user_content: list[dict[str, object]] = [{"type": "text", "text": user_text}]
     for image in images:
+        label = str(image.get("label") or "").strip()
+        if label:
+            user_content.append({"type": "text", "text": label})
         user_content.append(
             {
                 "type": "image_url",

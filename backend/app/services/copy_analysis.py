@@ -42,11 +42,14 @@ def _load_skill_prompt() -> str:
 
 def _build_user_prompt(*, manuscript: str, title: str, notes: str) -> str:
     title_block = f"拟定标题/定位：{title.strip()}" if title.strip() else "拟定标题/定位：未提供"
-    notes_block = f"补充说明：{notes.strip()}" if notes.strip() else "补充说明：无"
+    notes_block = f"补充说明 / 当前阶段：{notes.strip()}" if notes.strip() else "补充说明 / 当前阶段：无"
     return (
         "请从专业视频媒体运营和内容策划的角度，对下面这份视频文案/文稿做深度点评。"
         "重点关注点击动机、前30秒钩子、结构节奏、观众理解门槛、包装定位是否错位、互动潜力，以及哪些段落更像图文而不是视频。"
         "请不要泛泛而谈，要明确指出最关键的问题、为什么会拖数据，以及最优先怎么改。"
+        "如果补充说明里已经明确提到“已发布 / 已发到B站 / 已有播放和互动数据 / 当前复盘阶段”等信息，"
+        "就必须把这条视频视为已经上线的内容，不要再给出“改完再发”这类默认的预发布建议，"
+        "而是要优先回答：现有数据说明了什么、文稿与数据之间哪里匹配或错位、下一轮应该怎么改。"
         "\n\n"
         f"{title_block}\n"
         f"{notes_block}\n\n"
