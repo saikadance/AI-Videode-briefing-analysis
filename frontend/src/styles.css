@@ -813,6 +813,9 @@ blockquote {
 
 .detail-jump-panel {
   background: linear-gradient(180deg, rgba(255, 254, 250, 0.94), rgba(248, 243, 235, 0.9));
+  position: sticky;
+  top: 16px;
+  z-index: 5;
 }
 
 .detail-jump-strip {
@@ -884,6 +887,28 @@ blockquote {
   display: grid;
   gap: 14px;
   max-height: none;
+}
+
+.chat-thread-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.chat-filter-toggle {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  color: #5b4f43;
+  font-weight: 700;
+}
+
+.chat-search-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 16px;
 }
 
 .chat-group {
@@ -1105,8 +1130,14 @@ blockquote {
   }
 
   .detail-jump-strip,
-  .chat-group-toggle {
+  .chat-group-toggle,
+  .chat-search-row {
     width: 100%;
+  }
+
+  .chat-search-row {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .toolbar {

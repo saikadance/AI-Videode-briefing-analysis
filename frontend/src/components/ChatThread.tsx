@@ -6,7 +6,28 @@ interface ChatThreadProps {
 }
 
 export function ChatThread({ messages }: ChatThreadProps) {
-  const groups = useMemo(() => groupMessagesByDay(messages), [messages]);
+  const [query, setQuery] = useState("");
+  const [assistantOnly, setAssistantOnly] = useState(false);
+  const filteredMessages = useMemo(() => {
+    const keyword = query.trim().toLowerCase();
+    return messages.filter((message) => {
+      if (assistantOnly && message.role !== "assistant") {
+        return false;
+      }
+      if (!keyword) {
+        return true;
+      }
+      const haystack = [
+        message.content,
+        getSourceLabel(message.source),
+        ...message.attachments.map((attachment) => attachment.name),
+      ]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(keyword);
+    });
+  }, [messages, query, assistantOnly]);
+  const groups = useMemo(() => groupMessagesByDay(filteredMessages), [filteredMessages]);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
@@ -33,14 +54,34 @@ export function ChatThread({ messages }: ChatThreadProps) {
           <span className="section-kicker">项目记录</span>
           <h3>对话与分析历史</h3>
         </div>
-        {groups.length > 1 ? (
-          <button className="summary-nav-button" type="button" onClick={() => setCollapsedGroups({})}>
-            展开全部
+        <div className="chat-thread-actions">
+          <label className="chat-filter-toggle">
+            <input type="checkbox" checked={assistantOnly} onChange={(event) => setAssistantOnly(event.target.checked)} />
+            <span>仅看 AI</span>
+          </label>
+          {groups.length > 1 ? (
+            <button className="summary-nav-button" type="button" onClick={() => setCollapsedGroups({})}>
+              展开全部
+            </button>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="chat-search-row">
+        <input
+          className="text-input"
+          placeholder="搜索某条建议、某个关键词或附件名"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+        {query ? (
+          <button className="summary-nav-button" type="button" onClick={() => setQuery("")}>
+            清空搜索
           </button>
         ) : null}
       </div>
 
-      {messages.length ? (
+      {filteredMessages.length ? (
         <div className="chat-thread">
           {groups.map((group) => {
             const collapsed = collapsedGroups[group.key];
@@ -88,8 +129,12 @@ export function ChatThread({ messages }: ChatThreadProps) {
         </div>
       ) : (
         <div className="project-empty">
-          <h3>还没有项目对话</h3>
-          <p>先运行一次文稿分析，或者直接在下面输入你的追问与修改需求，后续这个项目会一直把结果保存在当前浏览器里。</p>
+          <h3>{messages.length ? "没有找到匹配内容" : "还没有项目对话"}</h3>
+          <p>
+            {messages.length
+              ? "换个关键词试试，或者取消“仅看 AI”筛选。"
+              : "先运行一次文稿分析，或者直接在下面输入你的追问与修改需求，后续这个项目会一直把结果保存在当前浏览器里。"}
+          </p>
         </div>
       )}
     </section>
