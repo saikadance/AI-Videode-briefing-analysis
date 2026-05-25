@@ -18,7 +18,7 @@ const DanmakuTimeline = lazy(() =>
 
 type AssistMode = "metrics" | "bilibili" | "files";
 type ResultView = "copy" | "metrics" | "community";
-type WorkspaceView = "workspace" | "projects";
+type WorkspaceView = "workspace" | "projects" | "detail";
 
 interface BootState {
   initialProjects: ProjectRecord[];
@@ -214,7 +214,7 @@ export default function App() {
   const [assistError, setAssistError] = useState<string | null>(null);
   const [chatError, setChatError] = useState<string | null>(null);
   const [resultView, setResultView] = useState<ResultView>("copy");
-  const resultSectionRef = useRef<HTMLElement | null>(null);
+  const detailPageRef = useRef<HTMLElement | null>(null);
 
   const orderedProjects = useMemo(() => sortProjects(projects), [projects]);
   const activeProject = useMemo(
@@ -322,6 +322,11 @@ export default function App() {
     setWorkspaceView("workspace");
   };
 
+  const openProjectDetail = (projectId: string) => {
+    setActiveProjectId(projectId);
+    setWorkspaceView("detail");
+  };
+
   const handleCopySubmit = async (event: FormEvent) => {
     event.preventDefault();
     if (!activeProject) {
@@ -350,8 +355,9 @@ export default function App() {
       }));
 
       setResultView("copy");
+      setWorkspaceView("detail");
       window.setTimeout(() => {
-        resultSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        detailPageRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       }, 80);
     } catch (submitError) {
       setCopyError(submitError instanceof Error ? submitError.message : "文稿分析失败");
@@ -402,8 +408,9 @@ export default function App() {
 
         setMetricImages([]);
         setResultView("metrics");
+        setWorkspaceView("detail");
         window.setTimeout(() => {
-          resultSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+          detailPageRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
         }, 80);
       } else {
         const analysis =
@@ -421,8 +428,9 @@ export default function App() {
         }));
 
         setResultView("community");
+        setWorkspaceView("detail");
         window.setTimeout(() => {
-          resultSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+          detailPageRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
         }, 80);
       }
     } catch (submitError) {
@@ -527,6 +535,11 @@ export default function App() {
           >
             项目列表
           </button>
+          {workspaceView === "detail" ? (
+            <button className="summary-nav-button active-chip" type="button" onClick={() => setWorkspaceView("detail")}>
+              项目结果页
+            </button>
+          ) : null}
           <button className="primary-button" type="button" onClick={handleCreateProject}>
             新建项目
           </button>
@@ -539,7 +552,7 @@ export default function App() {
             <ProjectList
               projects={orderedProjects}
               activeProjectId={activeProjectId}
-              onSelect={handleSelectProject}
+              onSelect={openProjectDetail}
               onCreate={handleCreateProject}
             />
 
@@ -570,7 +583,7 @@ export default function App() {
                     className={project.id === activeProjectId ? "recent-project-card active" : "recent-project-card"}
                     key={project.id}
                     type="button"
-                    onClick={() => handleSelectProject(project.id)}
+                    onClick={() => openProjectDetail(project.id)}
                   >
                     <strong>{getProjectDisplayTitle(project)}</strong>
                     <span>{project.notes.trim() || "暂无补充说明"}</span>
@@ -789,91 +802,120 @@ export default function App() {
                 {assistError ? <div className="error-banner">{assistError}</div> : null}
               </aside>
             </section>
+          </>
+        )}
+        {workspaceView === "detail" ? (
+          <section className="detail-page stack" ref={detailPageRef}>
+            <section className="panel detail-hero-panel">
+              <div className="panel-header detail-hero-header">
+                <div className="stack compact">
+                  <span className="section-kicker">项目结果页</span>
+                  <h2>{activeProject ? getProjectDisplayTitle(activeProject) : "未命名项目"}</h2>
+                </div>
+                <div className="detail-hero-actions">
+                  <button className="summary-nav-button" type="button" onClick={() => setWorkspaceView("workspace")}>
+                    返回主分析台
+                  </button>
+                  <button className="summary-nav-button" type="button" onClick={() => setWorkspaceView("projects")}>
+                    返回项目列表
+                  </button>
+                </div>
+              </div>
+              <p className="muted detail-hero-copy">
+                这里集中查看当前项目的已保存分析和对话记录。分析结果、聊天历史和图片附件都会跟着项目一起保存在当前浏览器里，方便后续导出和查阅。
+              </p>
+            </section>
 
-            <section className="analysis-lab-grid" ref={resultSectionRef}>
-              <section className="stack">
-                {hasAnyResult ? (
-                  <section className="panel result-shell">
-                    <div className="panel-header result-shell-header">
-                      <div className="stack compact">
-                        <span className="section-kicker">项目结果</span>
-                        <h2>已保存分析</h2>
-                      </div>
-                      <span className="muted">结果会跟着当前项目一起缓存，不需要重新滚很长的页面找之前的内容。</span>
+            {hasAnyResult ? (
+              <section className="panel result-shell">
+                <div className="panel-header result-shell-header">
+                  <div className="stack compact">
+                    <span className="section-kicker">项目结果</span>
+                    <h2>已保存分析</h2>
+                  </div>
+                  <span className="muted">分析前和分析后的内容现在已经拆开，主分析台只负责输入，这一页负责集中查看结果和后续复盘。</span>
+                </div>
+
+                <div className="result-tab-strip">
+                  {copyResult ? (
+                    <button
+                      className={resultView === "copy" ? "result-tab active" : "result-tab"}
+                      type="button"
+                      onClick={() => setResultView("copy")}
+                    >
+                      文稿分析
+                    </button>
+                  ) : null}
+                  {metricResult ? (
+                    <button
+                      className={resultView === "metrics" ? "result-tab active" : "result-tab"}
+                      type="button"
+                      onClick={() => setResultView("metrics")}
+                    >
+                      数据截图
+                    </button>
+                  ) : null}
+                  {communityResult ? (
+                    <button
+                      className={resultView === "community" ? "result-tab active" : "result-tab"}
+                      type="button"
+                      onClick={() => setResultView("community")}
+                    >
+                      评论弹幕
+                    </button>
+                  ) : null}
+                </div>
+
+                <div className="result-page">
+                  {resultView === "copy" && copyResult ? (
+                    <AiSummary content={copyResult.analysis} title="AI 文稿分析" />
+                  ) : null}
+
+                  {resultView === "metrics" && metricResult ? (
+                    <AiSummary content={metricResult.analysis} title="AI 数据截图分析" />
+                  ) : null}
+
+                  {resultView === "community" && communityResult ? (
+                    <div className="stack">
+                      {communityResult.source ? <SourceSummary source={communityResult.source} /> : null}
+                      {communityResult.ai_summary ? <AiSummary content={communityResult.ai_summary} title="AI 评论弹幕复盘" /> : null}
+                      <CommentSummary data={communityResult.comments} />
+                      <Suspense fallback={<section className="panel">弹幕时间轴加载中...</section>}>
+                        <DanmakuTimeline
+                          data={communityResult.danmaku}
+                          bucketSize={bucketSize}
+                          onBucketSizeChange={setBucketSize}
+                        />
+                      </Suspense>
+                      <PeakSegments data={communityResult.danmaku} />
                     </div>
-
-                    <div className="result-tab-strip">
-                      {copyResult ? (
-                        <button
-                          className={resultView === "copy" ? "result-tab active" : "result-tab"}
-                          type="button"
-                          onClick={() => setResultView("copy")}
-                        >
-                          文稿分析
-                        </button>
-                      ) : null}
-                      {metricResult ? (
-                        <button
-                          className={resultView === "metrics" ? "result-tab active" : "result-tab"}
-                          type="button"
-                          onClick={() => setResultView("metrics")}
-                        >
-                          数据截图
-                        </button>
-                      ) : null}
-                      {communityResult ? (
-                        <button
-                          className={resultView === "community" ? "result-tab active" : "result-tab"}
-                          type="button"
-                          onClick={() => setResultView("community")}
-                        >
-                          评论弹幕
-                        </button>
-                      ) : null}
-                    </div>
-
-                    <div className="result-page">
-                      {resultView === "copy" && copyResult ? (
-                        <AiSummary content={copyResult.analysis} title="AI 文稿分析" />
-                      ) : null}
-
-                      {resultView === "metrics" && metricResult ? (
-                        <AiSummary content={metricResult.analysis} title="AI 数据截图分析" />
-                      ) : null}
-
-                      {resultView === "community" && communityResult ? (
-                        <div className="stack">
-                          {communityResult.source ? <SourceSummary source={communityResult.source} /> : null}
-                          {communityResult.ai_summary ? <AiSummary content={communityResult.ai_summary} title="AI 评论弹幕复盘" /> : null}
-                          <CommentSummary data={communityResult.comments} />
-                          <Suspense fallback={<section className="panel">弹幕时间轴加载中...</section>}>
-                            <DanmakuTimeline
-                              data={communityResult.danmaku}
-                              bucketSize={bucketSize}
-                              onBucketSizeChange={setBucketSize}
-                            />
-                          </Suspense>
-                          <PeakSegments data={communityResult.danmaku} />
-                        </div>
-                      ) : null}
-                    </div>
-                  </section>
-                ) : (
-                  <section className="panel placeholder-panel">
-                    <h2>当前项目还没有分析结果</h2>
-                    <p>先运行一次文稿分析，结果就会保存在当前项目里，后续可以继续追问、补图和做二次复盘。</p>
-                  </section>
-                )}
+                  ) : null}
+                </div>
               </section>
+            ) : (
+              <section className="panel placeholder-panel">
+                <h2>当前项目还没有分析结果</h2>
+                <p>先从主分析台发起一次文稿分析，完成后会自动跳回这里。</p>
+              </section>
+            )}
 
-              <aside className="chat-column">
+            <section className="panel conversation-panel">
+              <div className="panel-header">
+                <div className="stack compact">
+                  <span className="section-kicker">对话分析历史</span>
+                  <h2>持续追问、改稿和复盘记录</h2>
+                </div>
+                <span className="muted">这一块会长期保留当前项目的分析对话、图片附件和后续改稿记录。</span>
+              </div>
+
+              <div className="conversation-stack">
                 <ChatThread messages={activeProject?.messages ?? []} />
                 <ChatComposer loading={chatLoading} onSend={handleProjectChat} />
                 {chatError ? <div className="error-banner">{chatError}</div> : null}
-              </aside>
+              </div>
             </section>
-          </>
-        )}
+          </section>
+        ) : null}
       </main>
     </div>
   );

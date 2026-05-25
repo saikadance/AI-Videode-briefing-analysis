@@ -787,17 +787,48 @@ blockquote {
   gap: 18px;
 }
 
+.detail-page {
+  display: grid;
+  gap: 24px;
+}
+
+.detail-hero-panel {
+  background: linear-gradient(180deg, rgba(255, 252, 247, 0.96), rgba(253, 247, 237, 0.96));
+}
+
+.detail-hero-header {
+  align-items: flex-start;
+}
+
+.detail-hero-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.detail-hero-copy {
+  margin: 0;
+  line-height: 1.68;
+}
+
+.conversation-panel {
+  background: linear-gradient(180deg, rgba(255, 254, 250, 0.96), rgba(247, 243, 236, 0.92));
+}
+
+.conversation-stack {
+  display: grid;
+  gap: 18px;
+}
+
 .chat-thread-panel,
 .chat-composer-panel {
-  background: linear-gradient(180deg, rgba(255, 254, 250, 0.96), rgba(247, 243, 236, 0.92));
+  background: rgba(255, 255, 255, 0.7);
 }
 
 .chat-thread {
   display: grid;
   gap: 14px;
-  max-height: 780px;
-  overflow: auto;
-  padding-right: 4px;
+  max-height: none;
 }
 
 .chat-bubble {
@@ -975,8 +1006,7 @@ blockquote {
   .stats-grid,
   .quote-grid,
   .comparison-grid,
-  .image-preview-grid,
-  .analysis-lab-grid {
+  .image-preview-grid {
     grid-template-columns: 1fr;
   }
 
@@ -985,6 +1015,10 @@ blockquote {
   .chat-bubble-header {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .detail-hero-actions {
+    width: 100%;
   }
 
   .toolbar {
