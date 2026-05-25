@@ -195,6 +195,109 @@ function getProjectDisplayTitle(project: ProjectRecord) {
   return project.title.trim() || "未命名";
 }
 
+function getAnalysisStageLabel(stage: "pre_publish" | "post_publish") {
+  return stage === "post_publish" ? "发布后复盘" : "发布前审稿";
+}
+
+function countProjectAnalyses(project: ProjectRecord) {
+  let total = 0;
+  if (project.latestCopyAnalysis) {
+    total += 1;
+  }
+  if (project.latestMetricsAnalysis) {
+    total += 1;
+  }
+  if (project.latestCommunityAnalysis) {
+    total += 1;
+  }
+  return total;
+}
+
+function countProjectAttachments(project: ProjectRecord) {
+  return project.messages.reduce((total, message) => total + message.attachments.length, 0);
+}
+
+function downloadTextFile(filename: string, content: string) {
+  const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+function buildProjectExport(project: ProjectRecord) {
+  const sections: string[] = [];
+
+  sections.push(`# ${getProjectDisplayTitle(project)}`);
+  sections.push("");
+  sections.push(`- 分析阶段：${getAnalysisStageLabel(project.analysisStage)}`);
+  sections.push(`- 最近更新：${new Date(project.updatedAt).toLocaleString("zh-CN")}`);
+  sections.push(`- 对话条数：${project.messages.length}`);
+  sections.push(`- 已保存分析：${countProjectAnalyses(project)}`);
+  sections.push(`- 图片附件：${countProjectAttachments(project)}`);
+  sections.push("");
+
+  if (project.notes.trim()) {
+    sections.push("## 补充备注");
+    sections.push(project.notes.trim());
+    sections.push("");
+  }
+
+  if (project.analysisContext.trim()) {
+    sections.push("## 分析上下文");
+    sections.push(project.analysisContext.trim());
+    sections.push("");
+  }
+
+  if (project.manuscript.trim()) {
+    sections.push("## 文稿正文");
+    sections.push(project.manuscript.trim());
+    sections.push("");
+  }
+
+  if (project.latestCopyAnalysis) {
+    sections.push("## 文稿分析");
+    sections.push(project.latestCopyAnalysis.trim());
+    sections.push("");
+  }
+
+  if (project.latestMetricsAnalysis) {
+    sections.push("## 数据截图分析");
+    sections.push(project.latestMetricsAnalysis.trim());
+    sections.push("");
+  }
+
+  if (project.latestCommunityAnalysis) {
+    sections.push("## 评论弹幕复盘");
+    if (project.latestCommunityAnalysis.ai_summary) {
+      sections.push(project.latestCommunityAnalysis.ai_summary.trim());
+      sections.push("");
+    }
+    sections.push(`- 评论数：${project.latestCommunityAnalysis.comments.total_comments}`);
+    sections.push(`- 弹幕数：${project.latestCommunityAnalysis.danmaku.total_danmaku}`);
+    sections.push("");
+  }
+
+  sections.push("## 对话分析历史");
+  sections.push("");
+  for (const message of project.messages) {
+    sections.push(`### ${message.role === "assistant" ? "AI 助手" : "你"} · ${new Date(message.createdAt).toLocaleString("zh-CN")}`);
+    sections.push(message.content.trim() || "（空内容）");
+    if (message.attachments.length) {
+      sections.push("");
+      sections.push("附件：");
+      message.attachments.forEach((attachment) => {
+        sections.push(`- ${attachment.name}（${attachment.kind === "data" ? "数据截图" : "参考图片"}）`);
+      });
+    }
+    sections.push("");
+  }
+
+  return sections.join("\n");
+}
+
 export default function App() {
   const [bootState] = useState<BootState>(() => bootstrapProjects());
   const [projects, setProjects] = useState<ProjectRecord[]>(bootState.initialProjects);
@@ -486,6 +589,14 @@ export default function App() {
     } finally {
       setChatLoading(false);
     }
+  };
+
+  const handleExportProject = () => {
+    if (!activeProject) {
+      return;
+    }
+    const safeTitle = getProjectDisplayTitle(activeProject).replace(/[\\/:*?"<>|]/g, "_");
+    downloadTextFile(`${safeTitle}-项目导出.md`, buildProjectExport(activeProject));
   };
 
   const copyResult = activeProject?.latestCopyAnalysis
@@ -813,6 +924,9 @@ export default function App() {
                   <h2>{activeProject ? getProjectDisplayTitle(activeProject) : "未命名项目"}</h2>
                 </div>
                 <div className="detail-hero-actions">
+                  <button className="summary-nav-button" type="button" onClick={handleExportProject}>
+                    导出项目
+                  </button>
                   <button className="summary-nav-button" type="button" onClick={() => setWorkspaceView("workspace")}>
                     返回主分析台
                   </button>
@@ -825,6 +939,54 @@ export default function App() {
                 这里集中查看当前项目的已保存分析和对话记录。分析结果、聊天历史和图片附件都会跟着项目一起保存在当前浏览器里，方便后续导出和查阅。
               </p>
             </section>
+
+            {activeProject ? (
+              <section className="panel project-summary-panel">
+                <div className="panel-header">
+                  <div className="stack compact">
+                    <span className="section-kicker">项目摘要</span>
+                    <h3>快速了解当前项目状态</h3>
+                  </div>
+                </div>
+
+                <div className="project-summary-grid">
+                  <article className="project-summary-card">
+                    <span>分析阶段</span>
+                    <strong>{getAnalysisStageLabel(activeProject.analysisStage)}</strong>
+                  </article>
+                  <article className="project-summary-card">
+                    <span>最近更新</span>
+                    <strong>{new Date(activeProject.updatedAt).toLocaleString("zh-CN")}</strong>
+                  </article>
+                  <article className="project-summary-card">
+                    <span>已保存分析</span>
+                    <strong>{countProjectAnalyses(activeProject)} 项</strong>
+                  </article>
+                  <article className="project-summary-card">
+                    <span>对话记录</span>
+                    <strong>{activeProject.messages.length} 条</strong>
+                  </article>
+                  <article className="project-summary-card">
+                    <span>图片附件</span>
+                    <strong>{countProjectAttachments(activeProject)} 张</strong>
+                  </article>
+                </div>
+
+                {activeProject.notes.trim() ? (
+                  <div className="project-summary-block">
+                    <span className="section-kicker">补充备注</span>
+                    <p>{activeProject.notes.trim()}</p>
+                  </div>
+                ) : null}
+
+                {activeProject.analysisContext.trim() ? (
+                  <div className="project-summary-block">
+                    <span className="section-kicker">分析上下文</span>
+                    <p>{activeProject.analysisContext.trim()}</p>
+                  </div>
+                ) : null}
+              </section>
+            ) : null}
 
             {hasAnyResult ? (
               <section className="panel result-shell">

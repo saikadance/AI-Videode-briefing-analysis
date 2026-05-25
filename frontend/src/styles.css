@@ -811,6 +811,51 @@ blockquote {
   line-height: 1.68;
 }
 
+.project-summary-panel {
+  background: linear-gradient(180deg, rgba(255, 252, 246, 0.95), rgba(252, 246, 237, 0.92));
+}
+
+.project-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+}
+
+.project-summary-card {
+  display: grid;
+  gap: 8px;
+  padding: 16px 18px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.84);
+  border: 1px solid rgba(29, 26, 23, 0.08);
+}
+
+.project-summary-card span {
+  color: #75695d;
+}
+
+.project-summary-card strong {
+  font-size: 1.08rem;
+  color: #2f261f;
+  line-height: 1.4;
+}
+
+.project-summary-block {
+  display: grid;
+  gap: 8px;
+  padding: 18px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.74);
+  border: 1px solid rgba(29, 26, 23, 0.06);
+}
+
+.project-summary-block p {
+  margin: 0;
+  color: #463b34;
+  line-height: 1.72;
+  white-space: pre-wrap;
+}
+
 .conversation-panel {
   background: linear-gradient(180deg, rgba(255, 254, 250, 0.96), rgba(247, 243, 236, 0.92));
 }
