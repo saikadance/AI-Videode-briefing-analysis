@@ -318,6 +318,9 @@ export default function App() {
   const [chatError, setChatError] = useState<string | null>(null);
   const [resultView, setResultView] = useState<ResultView>("copy");
   const detailPageRef = useRef<HTMLElement | null>(null);
+  const summarySectionRef = useRef<HTMLElement | null>(null);
+  const resultSectionRef = useRef<HTMLElement | null>(null);
+  const conversationSectionRef = useRef<HTMLElement | null>(null);
 
   const orderedProjects = useMemo(() => sortProjects(projects), [projects]);
   const activeProject = useMemo(
@@ -597,6 +600,15 @@ export default function App() {
     }
     const safeTitle = getProjectDisplayTitle(activeProject).replace(/[\\/:*?"<>|]/g, "_");
     downloadTextFile(`${safeTitle}-项目导出.md`, buildProjectExport(activeProject));
+  };
+
+  const jumpToSection = (target: "summary" | "result" | "conversation") => {
+    const refMap = {
+      summary: summarySectionRef,
+      result: resultSectionRef,
+      conversation: conversationSectionRef,
+    };
+    refMap[target].current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   const copyResult = activeProject?.latestCopyAnalysis
@@ -940,8 +952,28 @@ export default function App() {
               </p>
             </section>
 
+            <section className="panel detail-jump-panel">
+              <div className="panel-header">
+                <div className="stack compact">
+                  <span className="section-kicker">快速跳转</span>
+                  <h3>在长项目里快速定位</h3>
+                </div>
+              </div>
+              <div className="detail-jump-strip">
+                <button className="summary-nav-button" type="button" onClick={() => jumpToSection("summary")}>
+                  项目摘要
+                </button>
+                <button className="summary-nav-button" type="button" onClick={() => jumpToSection("result")}>
+                  项目结果
+                </button>
+                <button className="summary-nav-button" type="button" onClick={() => jumpToSection("conversation")}>
+                  对话历史
+                </button>
+              </div>
+            </section>
+
             {activeProject ? (
-              <section className="panel project-summary-panel">
+              <section className="panel project-summary-panel" ref={summarySectionRef}>
                 <div className="panel-header">
                   <div className="stack compact">
                     <span className="section-kicker">项目摘要</span>
@@ -989,7 +1021,7 @@ export default function App() {
             ) : null}
 
             {hasAnyResult ? (
-              <section className="panel result-shell">
+              <section className="panel result-shell" ref={resultSectionRef}>
                 <div className="panel-header result-shell-header">
                   <div className="stack compact">
                     <span className="section-kicker">项目结果</span>
@@ -1061,7 +1093,7 @@ export default function App() {
               </section>
             )}
 
-            <section className="panel conversation-panel">
+            <section className="panel conversation-panel" ref={conversationSectionRef}>
               <div className="panel-header">
                 <div className="stack compact">
                   <span className="section-kicker">对话分析历史</span>
