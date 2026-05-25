@@ -749,6 +749,16 @@ blockquote {
   gap: 14px;
 }
 
+.project-list-toolbar {
+  margin-bottom: 18px;
+}
+
+.project-section-label {
+  font-size: 0.9rem;
+  color: #8f5b2c;
+  font-weight: 700;
+}
+
 .recent-project-card,
 .project-card {
   display: grid;
@@ -758,8 +768,24 @@ blockquote {
   border-radius: 22px;
   border: 1px solid rgba(29, 26, 23, 0.08);
   background: rgba(255, 255, 255, 0.82);
-  cursor: pointer;
   color: #2f261f;
+}
+
+.project-card-main {
+  display: grid;
+  gap: 8px;
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  cursor: pointer;
+}
+
+.project-card-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .recent-project-card span,
@@ -773,6 +799,16 @@ blockquote {
 .project-card.active {
   border-color: rgba(201, 92, 15, 0.34);
   box-shadow: 0 12px 24px rgba(201, 92, 15, 0.14);
+}
+
+.delete-confirm-button {
+  border: 1px solid rgba(146, 41, 30, 0.18);
+  border-radius: 999px;
+  background: rgba(179, 44, 34, 0.08);
+  color: #92291e;
+  padding: 9px 14px;
+  font-weight: 700;
+  cursor: pointer;
 }
 
 .analysis-lab-grid {

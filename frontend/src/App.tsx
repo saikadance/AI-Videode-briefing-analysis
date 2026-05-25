@@ -23,6 +23,7 @@ type WorkspaceView = "workspace" | "projects" | "detail";
 interface BootState {
   initialProjects: ProjectRecord[];
   initialActiveProjectId: string | null;
+  initialDraftProject: ProjectRecord;
 }
 
 function normalizeAnalysisStage(value: string | undefined): "pre_publish" | "post_publish" {
@@ -39,7 +40,24 @@ function getDefaultAnalysisContext(stage: "pre_publish" | "post_publish") {
 
 function sortProjects(projects: ProjectRecord[]) {
   return [...projects].sort(
-    (left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()
+    (left, right) => {
+      if (Boolean(left.isFavorite) !== Boolean(right.isFavorite)) {
+        return left.isFavorite ? -1 : 1;
+      }
+      return new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime();
+    }
+  );
+}
+
+function isProjectMeaningful(project: ProjectRecord) {
+  return Boolean(
+    project.title.trim() ||
+      project.notes.trim() ||
+      project.manuscript.trim() ||
+      project.messages.length ||
+      project.latestCopyAnalysis ||
+      project.latestMetricsAnalysis ||
+      project.latestCommunityAnalysis
   );
 }
 
@@ -50,6 +68,7 @@ function createProjectRecord(): ProjectRecord {
     title: "",
     notes: "",
     manuscript: "",
+    isFavorite: false,
     analysisStage: "pre_publish",
     analysisContext: getDefaultAnalysisContext("pre_publish"),
     createdAt: now,
@@ -62,18 +81,21 @@ function createProjectRecord(): ProjectRecord {
 }
 
 function bootstrapProjects(): BootState {
-  const loadedProjects = sortProjects(loadProjects()).map((project): ProjectRecord => {
-    const analysisStage = normalizeAnalysisStage(project.analysisStage);
-    return {
-      ...project,
-      analysisStage,
-      analysisContext:
-        typeof project.analysisContext === "string" && project.analysisContext.trim()
-          ? project.analysisContext
-          : getDefaultAnalysisContext(analysisStage),
-    };
-  });
-  const initialProjects = loadedProjects.length ? loadedProjects : [createProjectRecord()];
+  const loadedProjects = sortProjects(loadProjects())
+    .map((project): ProjectRecord => {
+      const analysisStage = normalizeAnalysisStage(project.analysisStage);
+      return {
+        ...project,
+        isFavorite: Boolean(project.isFavorite),
+        analysisStage,
+        analysisContext:
+          typeof project.analysisContext === "string" && project.analysisContext.trim()
+            ? project.analysisContext
+            : getDefaultAnalysisContext(analysisStage),
+      };
+    })
+    .filter((project) => isProjectMeaningful(project));
+  const initialProjects = loadedProjects;
   const savedActiveProjectId = loadActiveProjectId();
   const initialActiveProjectId =
     savedActiveProjectId && initialProjects.some((project) => project.id === savedActiveProjectId)
@@ -83,6 +105,7 @@ function bootstrapProjects(): BootState {
   return {
     initialProjects,
     initialActiveProjectId,
+    initialDraftProject: createProjectRecord(),
   };
 }
 
@@ -301,6 +324,7 @@ function buildProjectExport(project: ProjectRecord) {
 export default function App() {
   const [bootState] = useState<BootState>(() => bootstrapProjects());
   const [projects, setProjects] = useState<ProjectRecord[]>(bootState.initialProjects);
+  const [draftProject, setDraftProject] = useState<ProjectRecord>(bootState.initialDraftProject);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(bootState.initialActiveProjectId);
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>("workspace");
   const [assistMode, setAssistMode] = useState<AssistMode>("metrics");
@@ -327,18 +351,12 @@ export default function App() {
     () => orderedProjects.find((project) => project.id === activeProjectId) ?? null,
     [orderedProjects, activeProjectId]
   );
+  const currentProject = activeProject ?? draftProject;
   const recentProjects = useMemo(() => orderedProjects.slice(0, 4), [orderedProjects]);
 
   useEffect(() => {
-    if (!projects.length) {
-      const freshProject = createProjectRecord();
-      setProjects([freshProject]);
-      setActiveProjectId(freshProject.id);
-      return;
-    }
-
-    if (!activeProjectId || !projects.some((project) => project.id === activeProjectId)) {
-      setActiveProjectId(projects[0].id);
+    if (activeProjectId && !projects.some((project) => project.id === activeProjectId)) {
+      setActiveProjectId(projects[0]?.id ?? null);
     }
   }, [projects, activeProjectId]);
 
@@ -374,24 +392,36 @@ export default function App() {
     );
   };
 
+  const persistDraftProject = (project: ProjectRecord) => {
+    const nextProject = {
+      ...project,
+      updatedAt: new Date().toISOString(),
+    };
+    setProjects((current) => sortProjects([nextProject, ...current]));
+    setActiveProjectId(nextProject.id);
+    setDraftProject(createProjectRecord());
+    return nextProject;
+  };
+
   const updateActiveProjectField = (
     field: "title" | "notes" | "manuscript" | "analysisContext",
     value: string
   ) => {
-    if (!activeProjectId) {
+    if (activeProjectId) {
+      updateProject(activeProjectId, (project) => ({
+        ...project,
+        [field]: value,
+      }));
       return;
     }
-    updateProject(activeProjectId, (project) => ({
-      ...project,
+    setDraftProject((current) => ({
+      ...current,
       [field]: value,
     }));
   };
 
   const handleAnalysisStageChange = (stage: "pre_publish" | "post_publish") => {
-    if (!activeProjectId) {
-      return;
-    }
-    updateProject(activeProjectId, (project) => {
+    const applyStageChange = (project: ProjectRecord) => {
       const previousDefault = getDefaultAnalysisContext(project.analysisStage);
       const nextDefault = getDefaultAnalysisContext(stage);
       const shouldReplaceContext =
@@ -402,30 +432,37 @@ export default function App() {
         analysisStage: stage,
         analysisContext: shouldReplaceContext ? nextDefault : project.analysisContext,
       };
-    });
+    };
+
+    if (activeProjectId) {
+      updateProject(activeProjectId, applyStageChange);
+      return;
+    }
+    setDraftProject((current) => applyStageChange(current));
   };
 
   const applyDefaultAnalysisContext = () => {
-    if (!activeProjectId || !activeProject) {
+    if (activeProjectId && activeProject) {
+      updateProject(activeProjectId, (project) => ({
+        ...project,
+        analysisContext: getDefaultAnalysisContext(project.analysisStage),
+      }));
       return;
     }
-    updateProject(activeProjectId, (project) => ({
-      ...project,
-      analysisContext: getDefaultAnalysisContext(project.analysisStage),
+    setDraftProject((current) => ({
+      ...current,
+      analysisContext: getDefaultAnalysisContext(current.analysisStage),
     }));
   };
 
   const handleCreateProject = () => {
-    const freshProject = createProjectRecord();
-    setProjects((current) => sortProjects([freshProject, ...current]));
-    setActiveProjectId(freshProject.id);
+    setDraftProject(createProjectRecord());
+    setActiveProjectId(null);
     setWorkspaceView("workspace");
     setResultView("copy");
-  };
-
-  const handleSelectProject = (projectId: string) => {
-    setActiveProjectId(projectId);
-    setWorkspaceView("workspace");
+    setCopyError(null);
+    setAssistError(null);
+    setChatError(null);
   };
 
   const openProjectDetail = (projectId: string) => {
@@ -433,9 +470,26 @@ export default function App() {
     setWorkspaceView("detail");
   };
 
+  const handleToggleFavoriteProject = (projectId: string) => {
+    updateProject(projectId, (project) => ({
+      ...project,
+      isFavorite: !project.isFavorite,
+    }));
+  };
+
+  const handleDeleteProject = (projectId: string) => {
+    setProjects((current) => sortProjects(current.filter((project) => project.id !== projectId)));
+    if (activeProjectId === projectId) {
+      setActiveProjectId(null);
+      setDraftProject(createProjectRecord());
+      setWorkspaceView("projects");
+      setResultView("copy");
+    }
+  };
+
   const handleCopySubmit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!activeProject) {
+    if (!currentProject) {
       return;
     }
 
@@ -444,21 +498,27 @@ export default function App() {
 
     try {
       const analysis = await analyzeCopy({
-        manuscript: activeProject.manuscript,
-        title: activeProject.title,
-        notes: activeProject.notes,
-        analysisStage: activeProject.analysisStage,
-        analysisContext: activeProject.analysisContext,
+        manuscript: currentProject.manuscript,
+        title: currentProject.title,
+        notes: currentProject.notes,
+        analysisStage: currentProject.analysisStage,
+        analysisContext: currentProject.analysisContext,
       });
 
-      updateProject(activeProject.id, (project) => ({
-        ...project,
+      const nextProject = {
+        ...currentProject,
         latestCopyAnalysis: analysis.analysis,
         messages: [
-          ...project.messages,
+          ...currentProject.messages,
           createAssistantMessage("已完成文稿分析，结果已保存到“文稿分析”页，可以继续追问和改稿。", "copy-analysis"),
         ],
-      }));
+      };
+
+      if (activeProjectId) {
+        updateProject(activeProjectId, () => nextProject);
+      } else {
+        persistDraftProject(nextProject);
+      }
 
       setResultView("copy");
       setWorkspaceView("detail");
@@ -481,7 +541,7 @@ export default function App() {
 
   const handleAssistSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!activeProject) {
+    if (!currentProject) {
       return;
     }
 
@@ -496,21 +556,27 @@ export default function App() {
 
         const screenshotAnalysis = await analyzeDataScreenshots({
           images: metricImages,
-          manuscript: activeProject.manuscript,
-          title: activeProject.title,
-          notes: activeProject.notes,
-          analysisStage: activeProject.analysisStage,
-          analysisContext: activeProject.analysisContext,
+          manuscript: currentProject.manuscript,
+          title: currentProject.title,
+          notes: currentProject.notes,
+          analysisStage: currentProject.analysisStage,
+          analysisContext: currentProject.analysisContext,
         });
 
-        updateProject(activeProject.id, (project) => ({
-          ...project,
+        const nextProject = {
+          ...currentProject,
           latestMetricsAnalysis: screenshotAnalysis.analysis,
           messages: [
-            ...project.messages,
+            ...currentProject.messages,
             createAssistantMessage("已完成数据截图分析，结果已保存到“数据截图”页。", "metrics-analysis"),
           ],
-        }));
+        };
+
+        if (activeProjectId) {
+          updateProject(activeProjectId, () => nextProject);
+        } else {
+          persistDraftProject(nextProject);
+        }
 
         setMetricImages([]);
         setResultView("metrics");
@@ -524,14 +590,20 @@ export default function App() {
             ? await analyzeBilibili({ videoInput, useAi })
             : await submitFiles();
 
-        updateProject(activeProject.id, (project) => ({
-          ...project,
+        const nextProject = {
+          ...currentProject,
           latestCommunityAnalysis: analysis,
           messages: [
-            ...project.messages,
+            ...currentProject.messages,
             createAssistantMessage("已完成评论与弹幕复盘，结果已保存到“评论弹幕”页。", "community-analysis"),
           ],
-        }));
+        };
+
+        if (activeProjectId) {
+          updateProject(activeProjectId, () => nextProject);
+        } else {
+          persistDraftProject(nextProject);
+        }
 
         setResultView("community");
         setWorkspaceView("detail");
@@ -547,7 +619,7 @@ export default function App() {
   };
 
   const handleProjectChat = async (payload: { content: string; attachments: PendingAttachment[] }) => {
-    if (!activeProject) {
+    if (!currentProject) {
       return;
     }
 
@@ -557,23 +629,28 @@ export default function App() {
     const storedAttachments = await buildStoredAttachments(payload.attachments);
     const userContent = payload.content.trim() || "附上了新的图片，请结合当前项目继续分析。";
     const userMessage = createUserMessage(userContent, storedAttachments);
-    const nextHistory = [...activeProject.messages, userMessage];
+    const nextProject = {
+      ...currentProject,
+      messages: [...currentProject.messages, userMessage],
+    };
+    const nextHistory = nextProject.messages;
 
-    updateProject(activeProject.id, (project) => ({
-      ...project,
-      messages: [...project.messages, userMessage],
-    }));
+    if (activeProjectId) {
+      updateProject(activeProjectId, () => nextProject);
+    } else {
+      persistDraftProject(nextProject);
+    }
 
     try {
       const response = await chatWithProject({
-        title: activeProject.title,
-        notes: activeProject.notes,
-        manuscript: activeProject.manuscript,
-        analysisStage: activeProject.analysisStage,
-        analysisContext: activeProject.analysisContext,
-        latestCopyAnalysis: activeProject.latestCopyAnalysis ?? "",
-        latestMetricsAnalysis: activeProject.latestMetricsAnalysis ?? "",
-        latestCommunityAnalysis: serializeCommunityAnalysis(activeProject.latestCommunityAnalysis),
+        title: currentProject.title,
+        notes: currentProject.notes,
+        manuscript: currentProject.manuscript,
+        analysisStage: currentProject.analysisStage,
+        analysisContext: currentProject.analysisContext,
+        latestCopyAnalysis: currentProject.latestCopyAnalysis ?? "",
+        latestMetricsAnalysis: currentProject.latestMetricsAnalysis ?? "",
+        latestCommunityAnalysis: serializeCommunityAnalysis(currentProject.latestCommunityAnalysis),
         history: buildProjectHistory(nextHistory),
         message: userContent,
         attachments: payload.attachments.map((attachment) => ({
@@ -583,10 +660,21 @@ export default function App() {
         })),
       });
 
-      updateProject(activeProject.id, (project) => ({
-        ...project,
-        messages: [...project.messages, createAssistantMessage(response.reply, "chat")],
-      }));
+      const repliedProject = {
+        ...nextProject,
+        messages: [...nextProject.messages, createAssistantMessage(response.reply, "chat")],
+      };
+
+      if (activeProjectId) {
+        updateProject(activeProjectId, () => repliedProject);
+      } else {
+        const savedDraftId = nextProject.id;
+        setProjects((current) =>
+          sortProjects(
+            current.map((project) => (project.id === savedDraftId ? { ...repliedProject, updatedAt: new Date().toISOString() } : project))
+          )
+        );
+      }
     } catch (requestError) {
       setChatError(requestError instanceof Error ? requestError.message : "项目对话失败");
     } finally {
@@ -677,6 +765,8 @@ export default function App() {
               activeProjectId={activeProjectId}
               onSelect={openProjectDetail}
               onCreate={handleCreateProject}
+              onToggleFavorite={handleToggleFavoriteProject}
+              onDelete={handleDeleteProject}
             />
 
             <section className="panel project-storage-note">
@@ -723,7 +813,9 @@ export default function App() {
                     <span className="section-kicker">主分析台</span>
                     <h2>文稿文案分析</h2>
                   </div>
-                  <span className="muted">当前项目：{activeProject ? getProjectDisplayTitle(activeProject) : "未命名"}</span>
+                  <span className="muted">
+                    当前项目：{activeProject ? getProjectDisplayTitle(activeProject) : "未保存草稿"}
+                  </span>
                 </div>
 
                 <form className="stack" onSubmit={handleCopySubmit}>
@@ -737,7 +829,7 @@ export default function App() {
                           id="copyTitle"
                           className="text-input"
                           placeholder="例如：B站游戏稿、开发者采访、剧情向长文稿"
-                          value={activeProject?.title ?? ""}
+                          value={currentProject.title}
                           onChange={(event) => updateActiveProjectField("title", event.target.value)}
                         />
                       </div>
@@ -749,7 +841,7 @@ export default function App() {
                           id="copyNotes"
                           className="text-input"
                           placeholder="例如：想保留采访质感、这是系列第二条、视频时长目标 8 分钟"
-                          value={activeProject?.notes ?? ""}
+                          value={currentProject.notes}
                           onChange={(event) => updateActiveProjectField("notes", event.target.value)}
                         />
                       </div>
@@ -763,7 +855,7 @@ export default function App() {
                         <select
                           id="analysisStage"
                           className="text-input"
-                          value={activeProject?.analysisStage ?? "pre_publish"}
+                          value={currentProject.analysisStage}
                           onChange={(event) =>
                             handleAnalysisStageChange(event.target.value as "pre_publish" | "post_publish")
                           }
@@ -794,7 +886,7 @@ export default function App() {
                       id="analysisContext"
                       className="context-area"
                       placeholder="这里写清楚这次想让 GPT 站在哪个工作场景下分析。比如：已经发到 B站，播放 38W，互动尚可，现在要做复盘并准备下一版。"
-                      value={activeProject?.analysisContext ?? ""}
+                      value={currentProject.analysisContext}
                       onChange={(event) => updateActiveProjectField("analysisContext", event.target.value)}
                     />
 
@@ -805,7 +897,7 @@ export default function App() {
                       id="manuscript"
                       className="text-area"
                       placeholder="把完整文稿贴到这里。分析完成后，结果会跟着这个项目一起缓存在当前浏览器里。"
-                      value={activeProject?.manuscript ?? ""}
+                      value={currentProject.manuscript}
                       onChange={(event) => updateActiveProjectField("manuscript", event.target.value)}
                     />
 
